@@ -1,0 +1,8 @@
+{
+  "name": "Remix StudyVault AI",
+  "description": "A refined, focused AI-powered study platform with intelligent reading, simple explanations, checkpoint quizzes, and a dedicated past questions vault.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

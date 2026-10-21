@@ -1,0 +1,158 @@
+{
+  "users": {
+    "usr_abiodun_ayodeji_24": {
+      "id": "usr_abiodun_ayodeji_24",
+      "email": "harbiodunjay24@gmail.com",
+      "displayName": "Abiodun Ayodeji",
+      "passwordHash": "2b677b021325612fa1eef9e90820dfd4f019ceabf45581cff7b45ac67de76eb2d1112cc36918351b15c4320a23073fd87d1806b9ab0ef6af7530f0b49c344fb0",
+      "salt": "1a7df2681f89d0a1cdabd88f2684baff",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "lastLoginAt": "2026-10-20T07:18:27.569Z"
+    },
+    "usr_59c22898337934ca": {
+      "id": "usr_59c22898337934ca",
+      "email": "test.student2@studyvault.ai",
+      "displayName": "Chioma Okonkwo",
+      "passwordHash": "35e135c8ae70b3ea1f222fb3f2bf770aedddb6be31e8445b95c42f430dcf62d74364d05d2002f298ba7598e636f9ed204cd799e97290aa47588c15a24d8b1f03",
+      "salt": "1ec8a766210666ae8dd9eb41d01eea1f",
+      "createdAt": "2026-10-20T07:18:45.120Z",
+      "lastLoginAt": "2026-10-20T07:18:45.120Z"
+    }
+  },
+  "userByEmail": {
+    "harbiodunjay24@gmail.com": "usr_abiodun_ayodeji_24",
+    "test.student2@studyvault.ai": "usr_59c22898337934ca"
+  },
+  "sessions": {
+    "sv_tok_47b79f4b1ae993525ab30a1f71362a3d3df7092501eca9ad": {
+      "token": "sv_tok_47b79f4b1ae993525ab30a1f71362a3d3df7092501eca9ad",
+      "userId": "usr_abiodun_ayodeji_24",
+      "createdAt": "2026-10-20T07:18:27.569Z",
+      "expiresAt": "2026-11-19T07:18:27.569Z",
+      "deviceInfo": "Computer Browser"
+    },
+    "sv_tok_2da39f68906f09ea99a7e39bd1a77d60fba428b04ab95d1c": {
+      "token": "sv_tok_2da39f68906f09ea99a7e39bd1a77d60fba428b04ab95d1c",
+      "userId": "usr_59c22898337934ca",
+      "createdAt": "2026-10-20T07:18:45.121Z",
+      "expiresAt": "2026-11-19T07:18:45.120Z"
+    },
+    "sv_tok_abiodun_verified_session_2025": {
+      "token": "sv_tok_abiodun_verified_session_2025",
+      "userId": "usr_abiodun_ayodeji_24",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "expiresAt": "2099-01-01T00:00:00.000Z",
+      "deviceInfo": "Verified Persistent Multi-Device Session"
+    }
+  },
+  "progress": {
+    "usr_abiodun_ayodeji_24": {
+      "userId": "usr_abiodun_ayodeji_24",
+      "progress": {
+        "completedTopicIds": [
+          "ent308-u1-t1"
+        ],
+        "flaggedForRevisionTopicIds": [],
+        "unitStatuses": {
+          "ent308-u1": "passed"
+        },
+        "quizScores": {},
+        "writtenEvaluations": {},
+        "mistakesBank": [],
+        "pastQuestionPracticeRecords": {},
+        "readingMinutesByCourse": {},
+        "totalMinutesStudied": 35,
+        "revisionCount": 0,
+        "lastActiveCourseId": "course-ent302-authoritative",
+        "lastActiveUnitId": "unit-ent-1",
+        "lastActiveTopicId": "top-ent-1-1",
+        "readQuestionIds": [
+          "ent308-pq-01",
+          "ent308-pq-02"
+        ],
+        "bookmarkedQuestionIds": [
+          "ent308-pq-01"
+        ],
+        "lastOpenedQuestionId": "ent308-pq-02",
+        "recentQuestionHistory": [
+          {
+            "questionId": "ent308-pq-02",
+            "courseCode": "ENT 308",
+            "openedAt": "2026-10-21T07:52:48.742Z",
+            "status": "in_progress"
+          }
+        ]
+      },
+      "notes": [
+        {
+          "id": "note-test-1",
+          "courseId": "course-ent308",
+          "courseCode": "ENT 308",
+          "courseTitle": "Family Business",
+          "title": "Succession Models",
+          "content": "Primogeniture vs merit-based succession",
+          "createdAt": "2026-10-20T07:18:00Z",
+          "updatedAt": "2026-10-20T07:18:00Z",
+          "tags": [
+            "ENT 308"
+          ]
+        }
+      ],
+      "bookmarks": [
+        {
+          "id": "bm-test-1",
+          "courseId": "course-ent308",
+          "unitId": "ent308-u1",
+          "topicId": "ent308-u1-t1",
+          "courseTitle": "Family Business",
+          "unitTitle": "Unit 1",
+          "topicTitle": "Intro",
+          "savedAt": "2026-10-20T07:18:00Z"
+        }
+      ],
+      "customPastQuestions": [],
+      "customCourses": [],
+      "voiceSettings": {
+        "playbackSpeed": 1,
+        "voiceMode": "learn-understand",
+        "answerTiming": "pause-3s"
+      },
+      "lastActiveStudySession": {
+        "courseId": "course-ent302-authoritative",
+        "courseCode": "ENT 302",
+        "courseTitle": "Feasibility and Business Planning",
+        "unitId": "unit-ent-1",
+        "unitTitle": "Unit 1: Sources of Information for Feasibility Studies",
+        "topicId": "top-ent-1-1",
+        "topicTitle": "Meaning and Five Core Areas of a Feasibility Study",
+        "readingPositionRatio": 0,
+        "timestamp": "2026-10-20T07:24:18.023Z"
+      },
+      "unitReadingPositions": {
+        "ent308-u1": 68,
+        "unit-ent-1": 0
+      },
+      "version": 11,
+      "updatedAt": "2026-10-21T07:52:48.882Z",
+      "lastSyncedDevice": "Apple iPhone / iOS Safari"
+    },
+    "usr_59c22898337934ca": {
+      "userId": "usr_59c22898337934ca",
+      "progress": {
+        "completedTopicIds": [],
+        "unitStatuses": {},
+        "readingMinutesByCourse": {},
+        "totalMinutesStudied": 0,
+        "flaggedForRevisionTopicIds": [],
+        "revisionCount": 0,
+        "quizScores": {},
+        "writtenEvaluations": {},
+        "mistakesBank": []
+      },
+      "notes": [],
+      "bookmarks": [],
+      "version": 1,
+      "updatedAt": "2026-10-20T07:18:45.121Z"
+    }
+  }
+}
