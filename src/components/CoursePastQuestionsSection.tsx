@@ -303,7 +303,7 @@ export const CoursePastQuestionsSection: React.FC<CoursePastQuestionsSectionProp
         let newQuestions: PastExamQuestionItem[] = [];
 
         if (isEnt308) {
-          newQuestions = AUTHENTIC_ENT308_EXTRACTED_PAST_QUESTIONS.map((q) => ({
+          newQuestions = AUTHENTIC_ENT308_EXTRACTED_PAST_QUESTIONS.map((q: PastExamQuestionItem) => ({
             ...q,
             courseId: course.id,
             courseCode: course.code,
@@ -313,7 +313,7 @@ export const CoursePastQuestionsSection: React.FC<CoursePastQuestionsSectionProp
             sourceFileName: uploadedFile.name,
           }));
         } else if (isEnt304) {
-          newQuestions = ENT304_PAST_QUESTIONS.map((q) => ({
+          newQuestions = AUTHENTIC_ENT304_EXTRACTED_PAST_QUESTIONS.map((q: PastExamQuestionItem) => ({
             ...q,
             courseId: course.id,
             courseCode: course.code,
@@ -323,7 +323,7 @@ export const CoursePastQuestionsSection: React.FC<CoursePastQuestionsSectionProp
             sourceFileName: uploadedFile.name,
           }));
         } else if (isEnt302) {
-          newQuestions = AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS.map((q) => ({
+          newQuestions = AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS.map((q: PastExamQuestionItem) => ({
             ...q,
             courseId: course.id,
             courseCode: course.code,
@@ -333,7 +333,7 @@ export const CoursePastQuestionsSection: React.FC<CoursePastQuestionsSectionProp
             sourceFileName: uploadedFile.name,
           }));
         } else if (isFms304) {
-          newQuestions = AUTHENTIC_FMS304_PAST_QUESTIONS.map((q) => ({
+          newQuestions = AUTHENTIC_FMS304_EXTRACTED_PAST_QUESTIONS.map((q: PastExamQuestionItem) => ({
             ...q,
             courseId: course.id,
             courseCode: course.code,

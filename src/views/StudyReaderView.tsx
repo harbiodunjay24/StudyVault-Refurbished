@@ -27,7 +27,6 @@ import {
   Palette,
   Maximize2,
   AlertTriangle,
-  Lock,
   X,
   Headphones
 } from 'lucide-react';
@@ -237,9 +236,6 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
       tags: [course.code, 'Explain Simply'],
     });
   };
-
-  const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
-  const [assessmentModalMessage, setAssessmentModalMessage] = useState('');
 
   const hasAssessments = Boolean(
     (currentTopic.checkpointQuiz && currentTopic.checkpointQuiz.length > 0) ||

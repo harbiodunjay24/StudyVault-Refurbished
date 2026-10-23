@@ -42,7 +42,8 @@ import {
   StudyTopic,
   QuestionMistakeRecord,
   WrittenEvaluationResult,
-  UnitStatus
+  UnitStatus,
+  PastQuestionDocument
 } from './types';
 import {
   getStoredCourses,
@@ -562,13 +563,36 @@ export default function App() {
     triggerCloudSave(progress, updated, bookmarks, true);
   };
 
-  const handleBatchAddPastQuestions = (newQuestions: PastExamQuestionItem[]) => {
+  const handleBatchAddPastQuestions = (
+    newQuestions: PastExamQuestionItem[],
+    docInfo?: PastQuestionDocument,
+    targetCourseId?: string
+  ) => {
     const existingIds = new Set(pastQuestions.map((q) => q.id));
     const toAdd = newQuestions.filter((q) => !existingIds.has(q.id));
-    const updated = [...toAdd, ...pastQuestions];
-    setPastQuestions(updated);
-    saveStoredPastQuestions(updated);
-    triggerCloudSave(progress, notes, bookmarks, true, updated, courses);
+    const updatedPQ = [...toAdd, ...pastQuestions];
+    setPastQuestions(updatedPQ);
+    saveStoredPastQuestions(updatedPQ);
+
+    let updatedCourses = courses;
+    if (docInfo) {
+      const cId = targetCourseId || docInfo.courseId;
+      updatedCourses = courses.map((item) => {
+        if (item.id === cId || item.code === docInfo.courseCode) {
+          const curDocs = item.pastQuestionDocuments || [];
+          const docExists = curDocs.some((d) => d.id === docInfo.id || d.name === docInfo.name);
+          return {
+            ...item,
+            pastQuestionDocuments: docExists ? curDocs : [...curDocs, docInfo],
+          };
+        }
+        return item;
+      });
+      setCourses(updatedCourses);
+      saveStoredCourses(updatedCourses);
+    }
+
+    triggerCloudSave(progress, notes, bookmarks, true, updatedPQ, updatedCourses);
   };
 
   const handleToggleBookmarkQuestion = (questionId: string) => {

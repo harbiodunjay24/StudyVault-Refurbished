@@ -55,68 +55,34 @@ export function getAllCourseUnitsInOrder(course: Course): StudyUnit[] {
   return units;
 }
 
-/**
- * Checks whether a specific unit is unlocked for study.
- * Unit 0 (the first unit in the course) is ALWAYS unlocked.
- * Any subsequent unit (index > 0) is unlocked ONLY IF the immediately preceding unit has been PASSED.
- */
 export function isUnitUnlocked(
-  course: Course,
-  unitId: string,
-  progress: UserProgress
+  _course: Course,
+  _unitId: string,
+  _progress: UserProgress
 ): { unlocked: boolean; reason?: string; requiredPrecedingUnit?: StudyUnit } {
-  const allUnits = getAllCourseUnitsInOrder(course);
-  const targetIndex = allUnits.findIndex((u) => u.id === unitId);
-
-  // If unit not found or is the very first unit, it's unlocked by default
-  if (targetIndex <= 0) {
-    return { unlocked: true };
-  }
-
-  const precedingUnit = allUnits[targetIndex - 1];
-  const masteryRecords = getStoredMasteryRecords(course.id);
-  const precedingMastery = masteryRecords[precedingUnit.id];
-
-  const precedingPassed =
-    Boolean(precedingMastery?.passed) ||
-    progress.unitStatuses?.[precedingUnit.id] === 'passed' ||
-    progress.unitStatuses?.[precedingUnit.id] === 'completed';
-
-  if (precedingPassed) {
-    return { unlocked: true };
-  }
-
-  return {
-    unlocked: false,
-    reason: `Unit ${precedingUnit.unitNumber || targetIndex} must be passed first with at least 70% before this unit unlocks.`,
-    requiredPrecedingUnit: precedingUnit,
-  };
+  // All units and topics are freely accessible immediately in any order
+  return { unlocked: true };
 }
 
 /**
- * Derives the strict, accurate UnitStatus based on actual student progress,
- * reading completion, assessment submissions, and prerequisite locks.
+ * Derives the accurate UnitStatus based on actual student progress,
+ * reading completion, and optional assessment submissions.
+ * Reading access is completely unrestricted across all units and topics.
  */
 export function computeAccurateUnitStatus(
   course: Course,
   unit: StudyUnit,
   progress: UserProgress
 ): UnitStatus {
-  // Check if locked by prerequisite
-  const lockCheck = isUnitUnlocked(course, unit.id, progress);
-  if (!lockCheck.unlocked) {
-    return 'locked';
-  }
-
   const masteryRecords = getStoredMasteryRecords(course.id);
   const record = masteryRecords[unit.id];
 
-  // If already passed
+  // If already passed optional assessment
   if (record?.passed || progress.unitStatuses?.[unit.id] === 'passed') {
     return 'passed';
   }
 
-  // If assessment was attempted and failed (needs practice)
+  // If assessment was attempted and needs practice
   if (record && !record.passed) {
     return 'needs_practice';
   }
@@ -131,9 +97,9 @@ export function computeAccurateUnitStatus(
     return 'not_started';
   }
 
-  // If all topics in the unit have been read, assessment is now mandatory
+  // If all topics in the unit have been read, mark as completed (assessments are optional)
   if (completedInUnit >= unitTopicIds.length) {
-    return 'assessment_required';
+    return 'completed';
   }
 
   return 'in_progress';

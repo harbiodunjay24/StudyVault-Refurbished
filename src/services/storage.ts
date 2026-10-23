@@ -19,7 +19,11 @@ import {
   ENT308_AUTHENTIC_COURSE,
   ENT308_MODULES,
   ENT308_PAST_QUESTIONS,
-  CSC202_SECOND_COURSE
+  CSC202_SECOND_COURSE,
+  BUS330_COURSE,
+  BUS330_QUESTIONS,
+  BUS322_COURSE,
+  BUS322_QUESTIONS
 } from './sampleData';
 import {
   AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS,
@@ -37,6 +41,16 @@ import {
   AUTHENTIC_FMS304_EXTRACTED_PAST_QUESTIONS,
   FMS304_UPLOADED_PQ_DOCUMENTS
 } from './fms304PastQuestionsData';
+import {
+  AUTHENTIC_BUS330_EXTRACTED_PAST_QUESTIONS,
+  BUS330_UPLOADED_PQ_DOCUMENTS
+} from './bus330PastQuestionsData';
+import {
+  AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS,
+  BUS322_UPLOADED_PQ_DOCUMENTS
+} from './bus322PastQuestionsData';
+import { ECO344_COURSE, ECO344_QUESTIONS } from './eco344Data';
+import { GST302_COURSE, GST302_QUESTIONS } from './gst302Data';
 import { consolidateCourseLibrary, ConsolidationReportItem } from './courseDeduplication';
 
 const CURRENT_VERSION = 'v13';
@@ -325,6 +339,18 @@ export function getStoredCourses(): Course[] {
       const hasFms = repaired.some(
         (c) => /FMS[-_\s]?304|SMS[-_\s]?304/i.test(c.code) || /Research[-_\s]?Methodology/i.test(c.title) || c.id.includes('fms304')
       );
+      const hasBus330 = repaired.some(
+        (c) => /BUS[-_\s]?330/i.test(c.code) || /Management[-_\s]?Theory/i.test(c.title) || c.id.includes('bus330')
+      );
+      const hasBus322 = repaired.some(
+        (c) => /BUS[-_\s]?322/i.test(c.code) || /Organi[sz]ational[-_\s]?Behaviour/i.test(c.title) || c.id.includes('bus322')
+      );
+      const hasEco344 = repaired.some(
+        (c) => /ECO[-_\s]?344/i.test(c.code) || /International[-_\s]?Economics/i.test(c.title) || c.id.includes('eco344')
+      );
+      const hasGst302 = repaired.some(
+        (c) => /GST[-_\s]?302/i.test(c.code) || /Business[-_\s]?Creation/i.test(c.title) || c.id.includes('gst302')
+      );
 
       let workingCourses = [...repaired];
       if (!hasEnt308) {
@@ -338,6 +364,18 @@ export function getStoredCourses(): Course[] {
       }
       if (!hasFms) {
         workingCourses = [...workingCourses, FMS304_SAMPLE_COURSE];
+      }
+      if (!hasBus330) {
+        workingCourses = [...workingCourses, BUS330_COURSE];
+      }
+      if (!hasBus322) {
+        workingCourses = [...workingCourses, BUS322_COURSE];
+      }
+      if (!hasEco344) {
+        workingCourses = [...workingCourses, ECO344_COURSE];
+      }
+      if (!hasGst302) {
+        workingCourses = [...workingCourses, GST302_COURSE];
       }
 
       // Ensure all courses in workingCourses always have their authoritative pastQuestionDocuments attached
@@ -407,13 +445,26 @@ export function getStoredCourses(): Course[] {
       ENT308_AUTHENTIC_COURSE,
       ENT304_AUTHENTIC_COURSE,
       ENT302_AUTHENTIC_COURSE,
-      FMS304_SAMPLE_COURSE
+      FMS304_SAMPLE_COURSE,
+      BUS330_COURSE,
+      BUS322_COURSE,
+      ECO344_COURSE,
+      GST302_COURSE
     ];
     saveStoredCourses(initialCourses);
     return initialCourses;
   } catch (e) {
     console.error('Failed to load courses from localStorage:', e);
-    return [ENT308_AUTHENTIC_COURSE, ENT304_AUTHENTIC_COURSE, ENT302_AUTHENTIC_COURSE, FMS304_SAMPLE_COURSE];
+    return [
+      ENT308_AUTHENTIC_COURSE,
+      ENT304_AUTHENTIC_COURSE,
+      ENT302_AUTHENTIC_COURSE,
+      FMS304_SAMPLE_COURSE,
+      BUS330_COURSE,
+      BUS322_COURSE,
+      ECO344_COURSE,
+      GST302_COURSE
+    ];
   }
 }
 
@@ -479,6 +530,48 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
               const missingFms = AUTHENTIC_FMS304_EXTRACTED_PAST_QUESTIONS.filter((q) => !existingIds.has(q.id));
               finalPQ = [...finalPQ, ...missingFms];
             }
+            // Ensure BUS 330 and BUS 322 questions are present
+            const bus330Questions = parsed.filter(
+              (q: PastExamQuestionItem) =>
+                /BUS[-_\s]?330/i.test(q.courseCode || '') ||
+                (q.courseId && /bus[-_]?330/i.test(q.courseId))
+            );
+            if (bus330Questions.length < 50) {
+              const existingIds = new Set(finalPQ.map((q) => q.id));
+              const missingBus330 = [...BUS330_QUESTIONS, ...AUTHENTIC_BUS330_EXTRACTED_PAST_QUESTIONS].filter((q) => !existingIds.has(q.id));
+              finalPQ = [...finalPQ, ...missingBus330];
+            }
+            const bus322Questions = parsed.filter(
+              (q: PastExamQuestionItem) =>
+                /BUS[-_\s]?322/i.test(q.courseCode || '') ||
+                (q.courseId && /bus[-_]?322/i.test(q.courseId))
+            );
+            if (bus322Questions.length < 50) {
+              const existingIds = new Set(finalPQ.map((q) => q.id));
+              const missingBus322 = [...BUS322_QUESTIONS, ...AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS].filter((q) => !existingIds.has(q.id));
+              finalPQ = [...finalPQ, ...missingBus322];
+            }
+            const eco344Questions = parsed.filter(
+              (q: PastExamQuestionItem) =>
+                /ECO[-_\s]?344/i.test(q.courseCode || '') ||
+                (q.courseId && /eco[-_]?344/i.test(q.courseId))
+            );
+            if (eco344Questions.length < 5) {
+              const existingIds = new Set(finalPQ.map((q) => q.id));
+              const missingEco344 = ECO344_QUESTIONS.filter((q) => !existingIds.has(q.id));
+              finalPQ = [...finalPQ, ...missingEco344];
+            }
+            const gst302Questions = parsed.filter(
+              (q: PastExamQuestionItem) =>
+                /GST[-_\s]?302/i.test(q.courseCode || '') ||
+                (q.courseId && /gst[-_]?302/i.test(q.courseId))
+            );
+            if (gst302Questions.length < 5) {
+              const existingIds = new Set(finalPQ.map((q) => q.id));
+              const missingGst302 = GST302_QUESTIONS.filter((q) => !existingIds.has(q.id));
+              finalPQ = [...finalPQ, ...missingGst302];
+            }
+
             saveStoredPastQuestions(finalPQ);
             return finalPQ;
           }
@@ -494,6 +587,12 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_ENT304_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_FMS304_EXTRACTED_PAST_QUESTIONS,
+      ...BUS330_QUESTIONS,
+      ...AUTHENTIC_BUS330_EXTRACTED_PAST_QUESTIONS,
+      ...BUS322_QUESTIONS,
+      ...AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS,
+      ...ECO344_QUESTIONS,
+      ...GST302_QUESTIONS,
     ];
     saveStoredPastQuestions(defaultPQ);
     return defaultPQ;
@@ -504,6 +603,12 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_ENT304_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_FMS304_EXTRACTED_PAST_QUESTIONS,
+      ...BUS330_QUESTIONS,
+      ...AUTHENTIC_BUS330_EXTRACTED_PAST_QUESTIONS,
+      ...BUS322_QUESTIONS,
+      ...AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS,
+      ...ECO344_QUESTIONS,
+      ...GST302_QUESTIONS,
     ];
   }
 }
@@ -552,7 +657,7 @@ export function isQuestionForCourse(
   }
 
   // Fallback: match by known course prefix if target ID contains course code
-  const knownPrefixes = ['ENT308', 'ENT304', 'ENT302', 'FMS304', 'CSC202'];
+  const knownPrefixes = ['ENT308', 'ENT304', 'ENT302', 'FMS304', 'BUS330', 'BUS322', 'ECO344', 'GST302', 'CSC202'];
   for (const p of knownPrefixes) {
     if (targetIdNorm.includes(p) && (qCode === p || qIdNorm.includes(p))) {
       return true;

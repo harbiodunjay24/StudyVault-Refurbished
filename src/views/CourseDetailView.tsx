@@ -17,7 +17,9 @@ import {
   AlertCircle,
   Lock,
   X,
-  Headphones
+  Headphones,
+  Archive,
+  ArrowRight
 } from 'lucide-react';
 import { Course, UserProgress, PersonalNote, PastExamQuestionItem, PastQuestionDocument, UnitStatus, StudyUnit, StudyTopic } from '../types';
 import { AITutorChat } from '../components/AITutorChat';
@@ -61,7 +63,6 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'syllabus' | 'past_questions' | 'documents' | 'notes'>('syllabus');
   const [aiTutorOpen, setAiTutorOpen] = useState(false);
-  const [lockedModal, setLockedModal] = useState<{ open: boolean; message: string; blockingUnit?: StudyUnit } | null>(null);
 
   // Filter notes and past questions strictly to this course
   const courseNotes = notes.filter((n) => n.courseId === course.id);
@@ -124,36 +125,15 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
     if (targetTopic && !progress.completedTopicIds.includes(targetTopic.id)) break;
   }
 
-  // Sequential unit progression list & lock checker
-  const orderedUnits = course.modules.flatMap((m) => m.units);
-  const isUnitLocked = (unitId: string): { locked: boolean; reason?: string; blockingUnit?: StudyUnit } => {
-    const idx = orderedUnits.findIndex((u) => u.id === unitId);
-    if (idx <= 0) return { locked: false };
-
-    // Check all previous units
-    for (let i = 0; i < idx; i++) {
-      const prev = orderedUnits[i];
-      const prevStatus = getUnitStatus(prev.id, prev.topics);
-      const isPrevPassed = prevStatus === 'passed' || prevStatus === 'completed';
-      if (!isPrevPassed) {
-        return {
-          locked: true,
-          reason: `Mandatory Unit Progression: You must complete and pass the assessment for "${prev.title}" (minimum 70% passing score) before unlocking this unit.`,
-          blockingUnit: prev,
-        };
-      }
-    }
-    return { locked: false };
-  };
-
+  // All units and topics are freely accessible in any order without mandatory gates
   const statusLabels: Record<UnitStatus, { label: string; textClass: string }> = {
-    locked: { label: 'Locked', textClass: 'text-[#8C928E]' },
-    not_started: { label: 'Not Started', textClass: 'text-[#8C928E]' },
-    in_progress: { label: 'In Progress', textClass: 'text-amber-700 font-medium' },
-    assessment_required: { label: 'Assessment Required', textClass: 'text-blue-700 font-medium' },
-    needs_practice: { label: 'Needs Practice', textClass: 'text-orange-700 font-medium' },
-    passed: { label: 'Passed', textClass: 'text-emerald-700 font-medium' },
-    completed: { label: 'Completed', textClass: 'text-emerald-700 font-medium' },
+    locked: { label: 'Unlocked', textClass: 'text-[#14382B]' },
+    not_started: { label: 'Unread', textClass: 'text-[#8C928E]' },
+    in_progress: { label: 'Reading in Progress', textClass: 'text-amber-700 font-medium' },
+    assessment_required: { label: 'Read · Optional Quiz Ready', textClass: 'text-sky-700 font-medium' },
+    needs_practice: { label: 'Quiz Attempted', textClass: 'text-orange-700 font-medium' },
+    passed: { label: 'Mastered', textClass: 'text-emerald-700 font-medium' },
+    completed: { label: 'Read', textClass: 'text-emerald-700 font-medium' },
     needs_revision: { label: 'Needs Revision', textClass: 'text-rose-700 font-medium' },
   };
 
@@ -329,7 +309,6 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
                 {module.units.map((unit) => {
                   const unitStatus = getUnitStatus(unit.id, unit.topics);
                   const statusInfo = statusLabels[unitStatus];
-                  const lockInfo = isUnitLocked(unit.id);
 
                   return (
                     <div key={unit.id} className="p-6 space-y-4">
@@ -340,16 +319,9 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
                               {unit.title}
                             </h4>
                             <span className="text-xs text-[#8C928E]" aria-hidden="true">·</span>
-                            {lockInfo.locked ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-                                <Lock className="w-3 h-3 text-amber-700" />
-                                <span>Unit Locked</span>
-                              </span>
-                            ) : (
-                              <span className={`text-xs ${statusInfo.textClass}`}>
-                                {statusInfo.label}
-                              </span>
-                            )}
+                            <span className={`text-xs ${statusInfo.textClass}`}>
+                              {statusInfo.label}
+                            </span>
                           </div>
                           {unit.objectives && unit.objectives.length > 0 && (
                             <p className="text-xs text-[#585E5A] line-clamp-1">
@@ -367,36 +339,18 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
                             <div
                               key={topic.id}
                               onClick={() => {
-                                if (lockInfo.locked) {
-                                  setLockedModal({
-                                    open: true,
-                                    message: lockInfo.reason || 'This unit is locked until previous units are completed.',
-                                    blockingUnit: lockInfo.blockingUnit,
-                                  });
-                                  return;
-                                }
                                 onSelectTopic(course.id, unit.id, topic.id);
                               }}
-                              className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-4 group shadow-2xs cursor-pointer ${
-                                lockInfo.locked
-                                  ? 'bg-[#FAF8F5]/60 border-amber-200/70 hover:bg-amber-50/50 hover:border-amber-300'
-                                  : 'border-[#E8E4DC] bg-[#FAF8F5] hover:bg-white hover:border-[#14382B]/40'
-                              }`}
+                              className="p-4 rounded-xl border border-[#E8E4DC] bg-[#FAF8F5] hover:bg-white hover:border-[#14382B]/40 transition-all flex items-center justify-between gap-4 group shadow-2xs cursor-pointer"
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                {lockInfo.locked ? (
-                                  <div className="w-5 h-5 rounded-md bg-amber-100/80 border border-amber-300/60 flex items-center justify-center shrink-0">
-                                    <Lock className="w-3 h-3 text-amber-800" />
-                                  </div>
-                                ) : isDone ? (
+                                {isDone ? (
                                   <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
                                 ) : (
                                   <div className="w-4 h-4 rounded-full border border-[#D8D2C6] shrink-0" />
                                 )}
                                 <div className="min-w-0">
-                                  <p className={`text-sm font-medium transition-colors truncate ${
-                                    lockInfo.locked ? 'text-[#585E5A]' : 'text-[#191C1A] group-hover:text-[#14382B]'
-                                  }`}>
+                                  <p className="text-sm font-medium transition-colors truncate text-[#191C1A] group-hover:text-[#14382B]">
                                     {topic.title}
                                   </p>
                                   <div className="flex items-center gap-2 text-xs text-[#8C928E] mt-0.5">
@@ -416,18 +370,10 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
-                                {lockInfo.locked ? (
-                                  <span className="text-[11px] font-semibold text-amber-800 bg-amber-100/60 px-2 py-0.5 rounded border border-amber-200">
-                                    Locked
-                                  </span>
-                                ) : (
-                                  <>
-                                    <span className="text-xs font-semibold text-[#14382B] opacity-0 group-hover:opacity-100 transition-opacity">
-                                      Study Topic
-                                    </span>
-                                    <ChevronRight className="w-4 h-4 text-[#8C928E] group-hover:text-[#14382B] group-hover:translate-x-0.5 transition-all" />
-                                  </>
-                                )}
+                                <span className="text-xs font-semibold text-[#14382B] opacity-0 group-hover:opacity-100 transition-opacity">
+                                  Study Topic
+                                </span>
+                                <ChevronRight className="w-4 h-4 text-[#8C928E] group-hover:text-[#14382B] group-hover:translate-x-0.5 transition-all" />
                               </div>
                             </div>
                           );
@@ -628,70 +574,6 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Mandatory Unit Progression Modal */}
-      {lockedModal?.open && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-        >
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-5 border border-[#E8E4DC] shadow-2xl animate-in zoom-in-95">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                  <Lock className="w-5 h-5 text-amber-800" />
-                </div>
-                <div>
-                  <h3 className="font-serif text-base font-bold text-[#191C1A]">
-                    Mandatory Unit Progression
-                  </h3>
-                  <p className="text-xs text-[#8C928E]">Sequential Unit Requirement</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setLockedModal(null)}
-                className="p-1 text-[#8C928E] hover:text-[#191C1A] rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-[#383D3B] leading-relaxed bg-[#FAF8F5] p-4 rounded-xl border border-[#E8E4DC]">
-              <p className="font-semibold text-amber-950">
-                You cannot skip ahead to this unit yet.
-              </p>
-              <p>
-                {lockedModal.message}
-              </p>
-              <p className="text-[#585E5A]">
-                StudyVault AI enforces rigorous study mastery: you must properly study and pass each unit's assessment before progressing to subsequent textbook units.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-1">
-              <button
-                onClick={() => setLockedModal(null)}
-                className="px-4 py-2 text-xs font-semibold text-[#585E5A] hover:text-[#191C1A] transition-colors"
-              >
-                Close
-              </button>
-              {lockedModal.blockingUnit && (
-                <button
-                  onClick={() => {
-                    const blk = lockedModal.blockingUnit!;
-                    setLockedModal(null);
-                    onSelectTopic(course.id, blk.id, blk.topics[0].id);
-                  }}
-                  className="px-4 py-2 text-xs font-semibold text-white bg-[#14382B] hover:bg-[#0E261D] rounded-xl transition-all shadow-xs"
-                >
-                  Study {lockedModal.blockingUnit.title}
-                </button>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
