@@ -1,31 +1,10 @@
 import { Course, PastExamQuestionItem, PastQuestionDocument, StudyModule } from '../types';
+import {
+  ECO344_UPLOADED_PQ_DOCUMENTS as AUTHENTIC_ECO344_PQ_DOCS,
+  AUTHENTIC_ECO344_EXTRACTED_PAST_QUESTIONS
+} from './eco344PastQuestionsData';
 
-export const ECO344_UPLOADED_PQ_DOCUMENTS: PastQuestionDocument[] = [
-  {
-    id: 'pq-doc-eco344-tma-archives',
-    courseId: 'course-eco344',
-    courseCode: 'ECO 344',
-    name: 'ECO344_INTERNATIONAL_ECONOMICS_TMA_AND_EXAM_ARCHIVES.pdf',
-    fileType: 'pdf',
-    fileSize: 1890000,
-    uploadedAt: '2026-10-23T08:10:00Z',
-    pageCount: 155,
-    processedPagesCount: 155,
-    reviewRequiredPagesCount: 0,
-    totalMainQuestions: 20,
-    totalSubQuestions: 15,
-    extractedQuestionsCount: 20,
-    questionsWithSuppliedAnswersCount: 20,
-    questionsWithoutSuppliedAnswersCount: 0,
-    questionsRequiringReviewCount: 0,
-    questionsSavedCount: 20,
-    status: 'ready',
-    extractionCompletenessStatus: 'verified_complete',
-    summary:
-      'Official NOUN Tutor-Marked Assignments (TMAs), Self-Assessment Exercises, and theoretical trade proofs with verified model solutions across all 4 Modules of ECO 344: International Economics.',
-    examSession: 'Official University Examination & TMA Archives'
-  }
-];
+export const ECO344_UPLOADED_PQ_DOCUMENTS: PastQuestionDocument[] = AUTHENTIC_ECO344_PQ_DOCS;
 
 export const ECO344_COURSE: Course = {
   id: 'course-eco344',
@@ -48,9 +27,35 @@ export const ECO344_COURSE: Course = {
       processingStatus: 'fully_processed',
       summary:
         'Official NOUN primary course textbook and study guide for ECO 344: International Economics by Dr. Yinka Ogunneye and Prof. James H. Landi.'
+    },
+    {
+      id: 'doc-eco344-psalmdata-pop-summary',
+      name: 'ECO344_INTERNATIONAL_ECONOMICS_COMPLETE_POP_SUMMARY_637cb592.pdf',
+      fileType: 'pdf',
+      fileSize: 173179,
+      uploadedAt: '2026-10-23T09:45:00Z',
+      extractedHeadingsCount: 15,
+      pageCount: 38,
+      status: 'ready',
+      processingStatus: 'fully_processed',
+      summary:
+        'Authentic NOUN Pen-on-Paper (POP) examination summary and past questions with verified model solutions covering sessions 2021_2, 2022_1, 2022_2, 2023_2, 2024_1, 2024_2, 2025_1, and 2025_2 by Psalmdata.'
+    },
+    {
+      id: 'doc-eco344-campusflava-summary',
+      name: 'ECO344_INTERNATIONAL_ECONOMICS_SUMMARY_08039407882_30c491f6.pdf',
+      fileType: 'pdf',
+      fileSize: 1345620,
+      uploadedAt: '2026-10-23T09:45:00Z',
+      extractedHeadingsCount: 15,
+      pageCount: 38,
+      status: 'ready',
+      processingStatus: 'fully_processed',
+      summary:
+        'Comprehensive examination study guide and structured Q&A series covering specific-factors, price wedges, Prebisch-Singer thesis, and international trade policy by Campusflava / L&A Goldmine Solutions.'
     }
   ],
-  pastQuestionDocuments: ECO344_UPLOADED_PQ_DOCUMENTS,
+  pastQuestionDocuments: AUTHENTIC_ECO344_PQ_DOCS,
   modules: [
     {
       id: 'mod-eco344-1',
@@ -735,7 +740,7 @@ export const ECO344_COURSE: Course = {
   ]
 };
 
-export const ECO344_QUESTIONS: PastExamQuestionItem[] = [
+export const ECO344_FOUNDATIONAL_QUESTIONS: PastExamQuestionItem[] = [
   {
     id: 'pq-eco344-tma-1',
     courseId: 'course-eco344',
@@ -886,4 +891,9 @@ export const ECO344_QUESTIONS: PastExamQuestionItem[] = [
     answerStatus: 'answer_supplied',
     unitMappingStatus: 'mapped'
   }
+];
+
+export const ECO344_QUESTIONS: PastExamQuestionItem[] = [
+  ...ECO344_FOUNDATIONAL_QUESTIONS,
+  ...AUTHENTIC_ECO344_EXTRACTED_PAST_QUESTIONS
 ];

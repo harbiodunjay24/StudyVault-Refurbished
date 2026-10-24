@@ -24,7 +24,9 @@ export interface ConsolidationResult {
  * e.g., "ENT 308", "ent-308", "ENT_308" all normalize to "ENT308".
  */
 export function normalizeCourseCode(code: string): string {
-  return (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const norm = (code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (norm === 'NOU107') return 'GST107';
+  return norm;
 }
 
 /**

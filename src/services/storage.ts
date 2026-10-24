@@ -51,6 +51,12 @@ import {
 } from './bus322PastQuestionsData';
 import { ECO344_COURSE, ECO344_QUESTIONS } from './eco344Data';
 import { GST302_COURSE, GST302_QUESTIONS } from './gst302Data';
+import {
+  GST107_COURSE,
+  GST107_QUESTIONS,
+  GST107_UPLOADED_PQ_DOCUMENTS,
+  AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS
+} from './gst107Data';
 import { consolidateCourseLibrary, ConsolidationReportItem } from './courseDeduplication';
 
 const CURRENT_VERSION = 'v13';
@@ -293,6 +299,105 @@ export function repairAndCompleteCourseUnits(course: Course): Course {
     };
   }
 
+  const isEco =
+    /ECO[-_\s]?344/i.test(course.code) ||
+    /International[-_\s]?Economics/i.test(course.title) ||
+    course.id.includes('eco344');
+
+  if (isEco) {
+    const existingUnitCount = course.modules.reduce((sum, m) => sum + m.units.length, 0);
+    const pastQuestionDocuments = (course.pastQuestionDocuments && course.pastQuestionDocuments.length >= 3)
+      ? course.pastQuestionDocuments
+      : ECO344_COURSE.pastQuestionDocuments;
+    const documents = (course.documents && course.documents.length >= 3)
+      ? course.documents
+      : ECO344_COURSE.documents;
+
+    if (existingUnitCount !== 15 || course.modules.length !== 4) {
+      return {
+        ...course,
+        code: 'ECO 344',
+        title: 'International Economics',
+        department: course.department || ECO344_COURSE.department,
+        description: ECO344_COURSE.description,
+        documents,
+        pastQuestionDocuments,
+        modules: ECO344_COURSE.modules,
+      };
+    }
+    return {
+      ...course,
+      documents,
+      pastQuestionDocuments,
+    };
+  }
+
+  const isGst107 =
+    /GST[-_\s]?107|NOU[-_\s]?107/i.test(course.code) ||
+    /Study[-_\s]?Guide[-_\s]?for[-_\s]?the[-_\s]?Distance[-_\s]?Learner/i.test(course.title) ||
+    course.id.includes('gst107');
+
+  if (isGst107) {
+    const existingUnitCount = course.modules.reduce((sum, m) => sum + m.units.length, 0);
+    const pastQuestionDocuments = (course.pastQuestionDocuments && course.pastQuestionDocuments.length >= 1)
+      ? course.pastQuestionDocuments
+      : GST107_COURSE.pastQuestionDocuments;
+    const documents = (course.documents && course.documents.length >= 2)
+      ? course.documents
+      : GST107_COURSE.documents;
+
+    if (existingUnitCount !== 16 || course.modules.length !== 4) {
+      return {
+        ...course,
+        code: 'GST 107',
+        title: 'A Study Guide for the Distance Learner',
+        department: course.department || GST107_COURSE.department,
+        description: GST107_COURSE.description,
+        documents,
+        pastQuestionDocuments,
+        modules: GST107_COURSE.modules,
+      };
+    }
+    return {
+      ...course,
+      documents,
+      pastQuestionDocuments,
+    };
+  }
+
+  const isGst302 =
+    /GST[-_\s]?302/i.test(course.code) ||
+    /Business[-_\s]?Creation/i.test(course.title) ||
+    course.id.includes('gst302');
+
+  if (isGst302) {
+    const existingUnitCount = course.modules.reduce((sum, m) => sum + m.units.length, 0);
+    const pastQuestionDocuments = (course.pastQuestionDocuments && course.pastQuestionDocuments.length >= 3)
+      ? course.pastQuestionDocuments
+      : GST302_COURSE.pastQuestionDocuments;
+    const documents = (course.documents && course.documents.length >= 3)
+      ? course.documents
+      : GST302_COURSE.documents;
+
+    if (existingUnitCount !== 25 || course.modules.length !== 7) {
+      return {
+        ...course,
+        code: 'GST 302',
+        title: 'Business Creation and Growth',
+        department: course.department || GST302_COURSE.department,
+        description: GST302_COURSE.description,
+        documents,
+        pastQuestionDocuments,
+        modules: GST302_COURSE.modules,
+      };
+    }
+    return {
+      ...course,
+      documents,
+      pastQuestionDocuments,
+    };
+  }
+
   return course;
 }
 
@@ -351,6 +456,9 @@ export function getStoredCourses(): Course[] {
       const hasGst302 = repaired.some(
         (c) => /GST[-_\s]?302/i.test(c.code) || /Business[-_\s]?Creation/i.test(c.title) || c.id.includes('gst302')
       );
+      const hasGst107 = repaired.some(
+        (c) => /GST[-_\s]?107|NOU[-_\s]?107/i.test(c.code) || /Study[-_\s]?Guide[-_\s]?for[-_\s]?the[-_\s]?Distance[-_\s]?Learner/i.test(c.title) || c.id.includes('gst107')
+      );
 
       let workingCourses = [...repaired];
       if (!hasEnt308) {
@@ -376,6 +484,9 @@ export function getStoredCourses(): Course[] {
       }
       if (!hasGst302) {
         workingCourses = [...workingCourses, GST302_COURSE];
+      }
+      if (!hasGst107) {
+        workingCourses = [...workingCourses, GST107_COURSE];
       }
 
       // Ensure all courses in workingCourses always have their authoritative pastQuestionDocuments attached
@@ -409,6 +520,33 @@ export function getStoredCourses(): Course[] {
             return {
               ...c,
               pastQuestionDocuments: FMS304_UPLOADED_PQ_DOCUMENTS,
+            };
+          }
+        }
+        if (/ECO[-_\s]?344/i.test(c.code) || /International[-_\s]?Economics/i.test(c.title) || c.id.includes('eco344')) {
+          if (!c.pastQuestionDocuments || c.pastQuestionDocuments.length < 3 || !c.documents || c.documents.length < 3) {
+            return {
+              ...c,
+              documents: ECO344_COURSE.documents,
+              pastQuestionDocuments: ECO344_COURSE.pastQuestionDocuments,
+            };
+          }
+        }
+        if (/GST[-_\s]?107|NOU[-_\s]?107/i.test(c.code) || /Study[-_\s]?Guide[-_\s]?for[-_\s]?the[-_\s]?Distance[-_\s]?Learner/i.test(c.title) || c.id.includes('gst107')) {
+          if (!c.pastQuestionDocuments || c.pastQuestionDocuments.length < 1 || !c.documents || c.documents.length < 2) {
+            return {
+              ...c,
+              documents: GST107_COURSE.documents,
+              pastQuestionDocuments: GST107_COURSE.pastQuestionDocuments,
+            };
+          }
+        }
+        if (/GST[-_\s]?302/i.test(c.code) || /Business[-_\s]?Creation/i.test(c.title) || c.id.includes('gst302')) {
+          if (!c.pastQuestionDocuments || c.pastQuestionDocuments.length < 3 || !c.documents || c.documents.length < 3) {
+            return {
+              ...c,
+              documents: GST302_COURSE.documents,
+              pastQuestionDocuments: GST302_COURSE.pastQuestionDocuments,
             };
           }
         }
@@ -449,7 +587,8 @@ export function getStoredCourses(): Course[] {
       BUS330_COURSE,
       BUS322_COURSE,
       ECO344_COURSE,
-      GST302_COURSE
+      GST302_COURSE,
+      GST107_COURSE
     ];
     saveStoredCourses(initialCourses);
     return initialCourses;
@@ -463,7 +602,8 @@ export function getStoredCourses(): Course[] {
       BUS330_COURSE,
       BUS322_COURSE,
       ECO344_COURSE,
-      GST302_COURSE
+      GST302_COURSE,
+      GST107_COURSE
     ];
   }
 }
@@ -556,7 +696,7 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
                 /ECO[-_\s]?344/i.test(q.courseCode || '') ||
                 (q.courseId && /eco[-_]?344/i.test(q.courseId))
             );
-            if (eco344Questions.length < 5) {
+            if (eco344Questions.length < 50) {
               const existingIds = new Set(finalPQ.map((q) => q.id));
               const missingEco344 = ECO344_QUESTIONS.filter((q) => !existingIds.has(q.id));
               finalPQ = [...finalPQ, ...missingEco344];
@@ -566,10 +706,20 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
                 /GST[-_\s]?302/i.test(q.courseCode || '') ||
                 (q.courseId && /gst[-_]?302/i.test(q.courseId))
             );
-            if (gst302Questions.length < 5) {
+            if (gst302Questions.length < 200) {
               const existingIds = new Set(finalPQ.map((q) => q.id));
               const missingGst302 = GST302_QUESTIONS.filter((q) => !existingIds.has(q.id));
               finalPQ = [...finalPQ, ...missingGst302];
+            }
+            const gst107Questions = parsed.filter(
+              (q: PastExamQuestionItem) =>
+                /GST[-_\s]?107|NOU[-_\s]?107/i.test(q.courseCode || '') ||
+                (q.courseId && /gst[-_]?107/i.test(q.courseId))
+            );
+            if (gst107Questions.length < 1000) {
+              const existingIds = new Set(finalPQ.map((q) => q.id));
+              const missingGst107 = AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS.filter((q) => !existingIds.has(q.id));
+              finalPQ = [...finalPQ, ...missingGst107];
             }
 
             saveStoredPastQuestions(finalPQ);
@@ -593,6 +743,7 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS,
       ...ECO344_QUESTIONS,
       ...GST302_QUESTIONS,
+      ...AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS,
     ];
     saveStoredPastQuestions(defaultPQ);
     return defaultPQ;
@@ -609,6 +760,7 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...AUTHENTIC_BUS322_EXTRACTED_PAST_QUESTIONS,
       ...ECO344_QUESTIONS,
       ...GST302_QUESTIONS,
+      ...AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS,
     ];
   }
 }
