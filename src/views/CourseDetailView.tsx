@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   ArrowLeft,
   Plus,
@@ -64,38 +64,45 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
   const [activeTab, setActiveTab] = useState<'syllabus' | 'past_questions' | 'documents' | 'notes'>('syllabus');
   const [aiTutorOpen, setAiTutorOpen] = useState(false);
 
-  // Filter notes and past questions strictly to this course
-  const courseNotes = notes.filter((n) => n.courseId === course.id);
-  const courseQuestions = getPastQuestionsForCourse(pastQuestions, course, allCourses);
+  // Filter notes and past questions strictly to this course (memoized)
+  const courseNotes = useMemo(
+    () => notes.filter((n) => n.courseId === course.id),
+    [notes, course.id]
+  );
+  const courseQuestions = useMemo(
+    () => getPastQuestionsForCourse(pastQuestions, course, allCourses),
+    [pastQuestions, course, allCourses]
+  );
 
-  // Authoritative past-question documents for this course
-  const pqDocuments: PastQuestionDocument[] =
-    course.pastQuestionDocuments && course.pastQuestionDocuments.length > 0
-      ? course.pastQuestionDocuments
-      : /ENT[-_\s]?308/i.test(course.code)
-      ? ENT308_UPLOADED_PQ_DOCUMENTS
-      : /ENT[-_\s]?304/i.test(course.code)
-      ? ENT304_UPLOADED_PQ_DOCUMENTS
-      : /ENT[-_\s]?302/i.test(course.code)
-      ? ENT302_UPLOADED_PQ_DOCUMENTS
-      : /FMS[-_\s]?304|SMS[-_\s]?304/i.test(course.code)
-      ? FMS304_UPLOADED_PQ_DOCUMENTS
-      : [];
+  // Authoritative past-question documents for this course (memoized)
+  const pqDocuments = useMemo<PastQuestionDocument[]>(() => {
+    if (course.pastQuestionDocuments && course.pastQuestionDocuments.length > 0) {
+      return course.pastQuestionDocuments;
+    }
+    if (/ENT[-_\s]?308/i.test(course.code)) return ENT308_UPLOADED_PQ_DOCUMENTS;
+    if (/ENT[-_\s]?304/i.test(course.code)) return ENT304_UPLOADED_PQ_DOCUMENTS;
+    if (/ENT[-_\s]?302/i.test(course.code)) return ENT302_UPLOADED_PQ_DOCUMENTS;
+    if (/FMS[-_\s]?304|SMS[-_\s]?304/i.test(course.code)) return FMS304_UPLOADED_PQ_DOCUMENTS;
+    return [];
+  }, [course]);
 
-  // Overall reading progress calculation
-  let totalTopics = 0;
-  let completedTopics = 0;
-  course.modules.forEach((mod) => {
-    mod.units.forEach((u) => {
-      u.topics.forEach((t) => {
-        totalTopics++;
-        if (progress.completedTopicIds.includes(t.id)) {
-          completedTopics++;
-        }
+  // Overall reading progress calculation (memoized)
+  const { totalTopics, completedTopics, percentCompleted } = useMemo(() => {
+    let total = 0;
+    let completed = 0;
+    course.modules.forEach((mod) => {
+      mod.units.forEach((u) => {
+        u.topics.forEach((t) => {
+          total++;
+          if (progress.completedTopicIds.includes(t.id)) {
+            completed++;
+          }
+        });
       });
     });
-  });
-  const percentCompleted = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { totalTopics: total, completedTopics: completed, percentCompleted: percent };
+  }, [course, progress.completedTopicIds]);
 
   // Compute unit status helper
   const getUnitStatus = (unitId: string, unitTopics: { id: string }[]): UnitStatus => {
@@ -577,14 +584,16 @@ export const CourseDetailView: React.FC<CourseDetailViewProps> = ({
         </div>
       )}
 
-      {/* StudyVault AI Tutor Chatbot */}
-      <AITutorChat
-        course={course}
-        courses={allCourses}
-        initialCourseId={course.id}
-        isOpen={aiTutorOpen}
-        onClose={() => setAiTutorOpen(false)}
-      />
+      {/* StudyVault AI Tutor Chatbot (lazy mounted) */}
+      {aiTutorOpen && (
+        <AITutorChat
+          course={course}
+          courses={allCourses}
+          initialCourseId={course.id}
+          isOpen={aiTutorOpen}
+          onClose={() => setAiTutorOpen(false)}
+        />
+      )}
     </div>
   );
 };

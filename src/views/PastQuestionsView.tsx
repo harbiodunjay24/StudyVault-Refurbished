@@ -18,6 +18,7 @@ import {
   Award,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Compass,
   Headphones,
   Search,
@@ -115,6 +116,7 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
   const [highlightedQuestionId, setHighlightedQuestionId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(30);
 
   // Modals
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -137,6 +139,7 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
     setSearchQuery('');
     setRevealedAnswers({});
     setPracticeActive(false);
+    setVisibleCount(30);
     if (onSelectCourse && courseId !== 'all') {
       onSelectCourse(courseId);
     }
@@ -255,16 +258,27 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
     });
   }, [courseQuestions, selectedTypeFilter, selectedDocFilter, selectedStatusFilter, searchQuery, progress]);
 
+  // Windowed questions slice to prevent DOM node explosion (30 questions initial vs 1,723)
+  const displayedQuestions = useMemo(() => {
+    return filteredQuestions.slice(0, visibleCount);
+  }, [filteredQuestions, visibleCount]);
+
   // Jump smoothly to a specific question card
   const handleJumpToQuestion = (q: PastExamQuestionItem) => {
+    const targetIdx = filteredQuestions.findIndex((item) => item.id === q.id);
+    if (targetIdx !== -1 && targetIdx >= visibleCount) {
+      setVisibleCount(Math.min(filteredQuestions.length, targetIdx + 20));
+    }
     setHighlightedQuestionId(q.id);
     if (onMarkQuestionStatus) {
       onMarkQuestionStatus(q.id, 'read', q.courseId, q.courseCode);
     }
-    const el = document.getElementById(`question-card-${q.id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    setTimeout(() => {
+      const el = document.getElementById(`question-card-${q.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
     setTimeout(() => {
       setHighlightedQuestionId(null);
     }, 2500);
@@ -925,8 +939,9 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {filteredQuestions.map((q, idx) => {
+                <>
+                  <div className="space-y-4">
+                    {displayedQuestions.map((q, idx) => {
                     const qNum = q.originalQuestionNumber || q.questionNumber || idx + 1;
                     const isRevealed = Boolean(revealedAnswers[q.id]);
                     const hasAnswer = Boolean(q.modelAnswer || q.officialAnswer || q.suppliedAnswer);
@@ -1195,9 +1210,41 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
                     );
                   })}
                 </div>
-              )}
-            </>
-          )}
+
+                {/* Incremental Pagination Controls */}
+                {filteredQuestions.length > 30 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-5 bg-white border border-[#E8E4DC] rounded-2xl shadow-xs mt-6">
+                    <div className="text-xs text-[#585E5A]">
+                      Showing <span className="font-semibold text-[#14382B]">{displayedQuestions.length}</span> of{' '}
+                      <span className="font-semibold text-[#14382B]">{filteredQuestions.length.toLocaleString()}</span> questions
+                    </div>
+                    {visibleCount < filteredQuestions.length ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setVisibleCount((prev) => Math.min(filteredQuestions.length, prev + 30))}
+                          className="px-4 py-2 bg-[#14382B] hover:bg-[#0E261D] text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>Load Next 30 Questions</span>
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setVisibleCount(filteredQuestions.length)}
+                          className="px-3 py-2 bg-[#FAF8F5] hover:bg-[#F0ECE4] text-[#585E5A] border border-[#D8D2C6] text-xs font-medium rounded-xl transition-colors cursor-pointer"
+                        >
+                          Show All ({filteredQuestions.length})
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-medium text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                        ✓ All {filteredQuestions.length.toLocaleString()} questions loaded
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
 
           {/* Upload Past Questions Modal */}
           <UploadPastQuestionsModal
@@ -1992,35 +2039,71 @@ const GenerateQuestionsModal: React.FC<{
     setIsGenerating(true);
 
     setTimeout(() => {
-      const generated: PastExamQuestionItem[] = Array.from({ length: questionCount }).map((_, idx) => ({
-        id: `pq-gen-${Date.now()}-${idx}`,
-        courseId: course.id,
-        courseCode: course.code,
-        courseTitle: course.title,
-        sourceType: 'ai_synthesized',
-        questionNumber: `P${idx + 1}`,
-        questionText: `Explain how the principles of ${course.title} apply to modern operational systems${
-          topicFocus ? ` with specific reference to ${topicFocus}` : ''
-        }.`,
-        options: [
-          'Rigorous implementation guided strictly by textbook frameworks and measurable outcomes',
-          'Arbitrary speculation without systematic review',
-          'Eliminating all monitoring controls completely',
-          'Relying solely on informal subjective impressions'
-        ],
-        correctAnswer: 'A',
-        modelAnswer: `Based on the official textbook for ${course.code}: Operations require rigorous methodological design, explicit verification of assumptions, and systematic alignment with institutional objectives.`,
-        marks: 10,
-        isPastQuestion: false,
-        difficulty: 'Intermediate',
-        year: 'AI Practice Sim',
-        unitMappingStatus: 'mapped',
-      }));
+      const allTopics = course.modules.flatMap((m) =>
+        m.units.flatMap((u) => u.topics.map((t) => ({ topic: t, unit: u, module: m })))
+      );
+
+      // If topicFocus is specified, filter by topicFocus
+      let eligible = allTopics;
+      if (topicFocus.trim()) {
+        const lowerFocus = topicFocus.toLowerCase();
+        const matched = allTopics.filter(
+          (item) =>
+            item.topic.title.toLowerCase().includes(lowerFocus) ||
+            item.unit.title.toLowerCase().includes(lowerFocus) ||
+            item.topic.content.toLowerCase().includes(lowerFocus)
+        );
+        if (matched.length > 0) eligible = matched;
+      }
+
+      // Pick distinct topics
+      const step = Math.max(1, Math.floor(eligible.length / questionCount));
+      const selectedItems = Array.from({ length: questionCount }).map((_, idx) => {
+        return eligible[(idx * step) % eligible.length];
+      });
+
+      const generated: PastExamQuestionItem[] = selectedItems.map((item, idx) => {
+        const topDef = item.topic.textbookDefinitions?.[0];
+        const modelAnswer = topDef
+          ? `According to ${course.code} (${item.unit.title}): ${topDef.term} is defined as ${topDef.definition}${topDef.sourceAuthor ? ` (${topDef.sourceAuthor})` : ''}.`
+          : `Based on the official textbook for ${course.code} (${item.unit.title}): ${item.topic.title} emphasizes systematic conceptual mastery, verifiable criteria, and alignment with course learning outcomes.`;
+
+        const qText = topDef
+          ? `According to the ${course.code} course material for ${item.unit.title}, how is "${topDef.term}" defined and applied?`
+          : `Explain the core principles and academic significance of "${item.topic.title}" in ${course.code}.`;
+
+        return {
+          id: `pq-gen-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          courseId: course.id,
+          courseCode: course.code,
+          courseTitle: course.title,
+          sourceType: 'ai_synthesized',
+          questionNumber: `P${idx + 1}`,
+          questionText: qText,
+          options: [
+            topDef
+              ? `${topDef.definition} (Authoritative textbook definition)`
+              : `Systematic implementation based strictly on the principles of ${item.topic.title}`,
+            'Arbitrary decision-making unsupported by course frameworks',
+            'Eliminating all monitoring controls and procedural verification',
+            'Relying solely on informal subjective impressions'
+          ],
+          correctAnswer: 'A',
+          modelAnswer,
+          marks: 10,
+          isPastQuestion: false,
+          difficulty: 'Intermediate',
+          year: 'AI Practice Simulation',
+          unitMappingStatus: 'mapped',
+          documentName: 'AI Practice Question Generator',
+          textbookExplanation: `Grounded in ${item.unit.title}: ${item.topic.title}.`,
+        };
+      });
 
       onQuestionsGenerated(generated);
       setIsGenerating(false);
       onClose();
-    }, 600);
+    }, 250);
   };
 
   return (

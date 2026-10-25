@@ -69,6 +69,13 @@ const STORAGE_KEYS = {
   CONSOLIDATION_LOG: `studyvault_consolidation_log_${CURRENT_VERSION}`,
 };
 
+// High-speed in-memory caches to eliminate repeated JSON.parse / localStorage operations on main thread
+let _memoryCachedCourses: Course[] | null = null;
+let _memoryCachedPastQuestions: PastExamQuestionItem[] | null = null;
+let _memoryCachedNotes: PersonalNote[] | null = null;
+let _memoryCachedBookmarks: Bookmark[] | null = null;
+let _memoryCachedProgress: UserProgress[] | UserProgress | null = null;
+
 const LEGACY_COURSE_KEYS = [
   'studyvault_courses_v13',
   'studyvault_courses_v12',
@@ -407,6 +414,10 @@ export function repairAndCompleteCourseUnits(course: Course): Course {
  * and ensures authentic courses are available if the store was empty.
  */
 export function getStoredCourses(): Course[] {
+  if (_memoryCachedCourses && _memoryCachedCourses.length > 0) {
+    return _memoryCachedCourses;
+  }
+
   try {
     let loadedCourses: Course[] = [];
 
@@ -609,6 +620,7 @@ export function getStoredCourses(): Course[] {
 }
 
 export function saveStoredCourses(courses: Course[]): void {
+  _memoryCachedCourses = courses;
   try {
     localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
   } catch (e) {
@@ -617,6 +629,10 @@ export function saveStoredCourses(courses: Course[]): void {
 }
 
 export function getStoredPastQuestions(): PastExamQuestionItem[] {
+  if (_memoryCachedPastQuestions && _memoryCachedPastQuestions.length > 0) {
+    return _memoryCachedPastQuestions;
+  }
+
   try {
     for (const key of LEGACY_PQ_KEYS) {
       const raw = localStorage.getItem(key);
@@ -722,6 +738,7 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
               finalPQ = [...finalPQ, ...missingGst107];
             }
 
+            _memoryCachedPastQuestions = finalPQ;
             saveStoredPastQuestions(finalPQ);
             return finalPQ;
           }
@@ -745,11 +762,12 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...GST302_QUESTIONS,
       ...AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS,
     ];
+    _memoryCachedPastQuestions = defaultPQ;
     saveStoredPastQuestions(defaultPQ);
     return defaultPQ;
   } catch (e) {
     console.error('Failed to load past questions from localStorage:', e);
-    return [
+    const fallback = [
       ...AUTHENTIC_ENT308_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_ENT302_EXTRACTED_PAST_QUESTIONS,
       ...AUTHENTIC_ENT304_EXTRACTED_PAST_QUESTIONS,
@@ -762,12 +780,11 @@ export function getStoredPastQuestions(): PastExamQuestionItem[] {
       ...GST302_QUESTIONS,
       ...AUTHENTIC_GST107_EXTRACTED_PAST_QUESTIONS,
     ];
+    _memoryCachedPastQuestions = fallback;
+    return fallback;
   }
 }
 
-/**
- * Filter and curate all past questions matching a specific unit from both uploaded documents
- */
 /**
  * Authoritative check whether a question belongs to a course.
  * Performs rigorous matching using direct course ID, normalized course code (e.g. ENT 308, ENT 304, ENT 302, FMS 304),
@@ -779,11 +796,10 @@ export function isQuestionForCourse(
   courses?: Course[]
 ): boolean {
   if (!q) return false;
-  const courseList = courses && courses.length > 0 ? courses : (typeof window !== 'undefined' ? getStoredCourses() : []);
-  const course = typeof courseOrId === 'string'
-    ? (courseList.find((c) => c.id === courseOrId) || null)
-    : courseOrId;
-  const targetId = typeof courseOrId === 'string' ? courseOrId : courseOrId.id;
+  const course = typeof courseOrId === 'object' && courseOrId !== null
+    ? courseOrId
+    : ((courses && courses.length > 0 ? courses : _memoryCachedCourses) || []).find((c) => c.id === courseOrId) || null;
+  const targetId = typeof courseOrId === 'string' ? courseOrId : courseOrId?.id;
 
   // Direct exact courseId match
   if (q.courseId && (q.courseId === targetId || (course && q.courseId === course.id))) {
@@ -797,7 +813,6 @@ export function isQuestionForCourse(
 
   if (targetCode && qCode) {
     if (qCode === targetCode) return true;
-    // Strictly prevent different course codes from matching (e.g. ENT302 vs ENT308 vs ENT304 vs FMS304)
     return false;
   }
 
@@ -809,7 +824,7 @@ export function isQuestionForCourse(
   }
 
   // Fallback: match by known course prefix if target ID contains course code
-  const knownPrefixes = ['ENT308', 'ENT304', 'ENT302', 'FMS304', 'BUS330', 'BUS322', 'ECO344', 'GST302', 'CSC202'];
+  const knownPrefixes = ['ENT308', 'ENT304', 'ENT302', 'FMS304', 'BUS330', 'BUS322', 'ECO344', 'GST302', 'GST107', 'CSC202'];
   for (const p of knownPrefixes) {
     if (targetIdNorm.includes(p) && (qCode === p || qIdNorm.includes(p))) {
       return true;
@@ -827,17 +842,59 @@ export function isQuestionForCourse(
 /**
  * Retrieves all past examination questions belonging strictly to the selected course.
  * Combines all questions across every uploaded document for that course.
+ * High-speed vectorized filtering with pre-normalized matching targets.
  */
 export function getPastQuestionsForCourse(
   pastQuestions: PastExamQuestionItem[],
   courseOrId: Course | string,
   courses?: Course[]
 ): PastExamQuestionItem[] {
-  return pastQuestions.filter((q) => isQuestionForCourse(q, courseOrId, courses));
+  if (!pastQuestions || pastQuestions.length === 0) return [];
+  const courseList = (courses && courses.length > 0 ? courses : _memoryCachedCourses) || [];
+  const course = typeof courseOrId === 'object' && courseOrId !== null
+    ? courseOrId
+    : courseList.find((c) => c.id === courseOrId) || null;
+  const targetId = typeof courseOrId === 'string' ? courseOrId : courseOrId?.id;
+
+  const norm = (s?: string) => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const targetCode = course ? norm(course.code) : '';
+  const targetIdNorm = norm(targetId);
+
+  return pastQuestions.filter((q) => {
+    if (!q) return false;
+    // 1. Direct ID match
+    if (q.courseId && (q.courseId === targetId || (course && q.courseId === course.id))) {
+      return true;
+    }
+    // 2. Normalized code match
+    const qCode = norm(q.courseCode);
+    if (targetCode && qCode) {
+      if (qCode === targetCode) return true;
+      return false;
+    }
+    // 3. Normalized ID match
+    const qIdNorm = norm(q.courseId);
+    if (targetIdNorm && qIdNorm && targetIdNorm === qIdNorm) {
+      return true;
+    }
+    // 4. Known prefix match
+    const knownPrefixes = ['ENT308', 'ENT304', 'ENT302', 'FMS304', 'BUS330', 'BUS322', 'ECO344', 'GST302', 'GST107', 'CSC202'];
+    for (const p of knownPrefixes) {
+      if (targetIdNorm.includes(p) && (qCode === p || qIdNorm.includes(p))) {
+        return true;
+      }
+    }
+    // 5. Title match
+    if (course && course.title && q.courseTitle && norm(course.title) === norm(q.courseTitle)) {
+      return true;
+    }
+    return false;
+  });
 }
 
 /**
  * Filter and curate all past questions matching a specific unit from both uploaded documents
+ * Extremely fast: runs on course-scoped subset rather than whole library.
  */
 export function getPastQuestionsForUnit(
   pastQuestions: PastExamQuestionItem[],
@@ -847,14 +904,14 @@ export function getPastQuestionsForUnit(
   unitTitle?: string,
   courses?: Course[]
 ): PastExamQuestionItem[] {
+  if (!pastQuestions || pastQuestions.length === 0) return [];
+  const courseQuestions = courseId
+    ? getPastQuestionsForCourse(pastQuestions, courseId, courses)
+    : pastQuestions;
+
   const normTitle = (t?: string) => t?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
   const currentTitleNorm = normTitle(unitTitle);
   const currentUnitNum = typeof unitNumber === 'string' ? parseFloat(unitNumber) : unitNumber;
-
-  // First isolate only questions that strictly belong to this course
-  const courseQuestions = courseId
-    ? pastQuestions.filter((q) => isQuestionForCourse(q, courseId, courses))
-    : pastQuestions;
 
   return courseQuestions.filter((q) => {
     // Direct unit ID match
@@ -890,6 +947,7 @@ export function getPastQuestionsForUnit(
 }
 
 export function saveStoredPastQuestions(questions: PastExamQuestionItem[]): void {
+  _memoryCachedPastQuestions = questions;
   try {
     localStorage.setItem(STORAGE_KEYS.PAST_QUESTIONS, JSON.stringify(questions));
   } catch (e) {
@@ -898,6 +956,10 @@ export function saveStoredPastQuestions(questions: PastExamQuestionItem[]): void
 }
 
 export function getStoredNotes(): PersonalNote[] {
+  if (_memoryCachedNotes && Array.isArray(_memoryCachedNotes)) {
+    return _memoryCachedNotes;
+  }
+
   try {
     for (const key of LEGACY_NOTES_KEYS) {
       const raw = localStorage.getItem(key);
@@ -905,6 +967,7 @@ export function getStoredNotes(): PersonalNote[] {
         try {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            _memoryCachedNotes = parsed;
             saveStoredNotes(parsed);
             return parsed;
           }
@@ -913,6 +976,7 @@ export function getStoredNotes(): PersonalNote[] {
         }
       }
     }
+    _memoryCachedNotes = [];
     return [];
   } catch (e) {
     console.error('Failed to load notes from localStorage:', e);
@@ -921,6 +985,7 @@ export function getStoredNotes(): PersonalNote[] {
 }
 
 export function saveStoredNotes(notes: PersonalNote[]): void {
+  _memoryCachedNotes = notes;
   try {
     localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(notes));
   } catch (e) {
@@ -929,6 +994,10 @@ export function saveStoredNotes(notes: PersonalNote[]): void {
 }
 
 export function getStoredBookmarks(): Bookmark[] {
+  if (_memoryCachedBookmarks && Array.isArray(_memoryCachedBookmarks)) {
+    return _memoryCachedBookmarks;
+  }
+
   try {
     for (const key of LEGACY_BOOKMARKS_KEYS) {
       const raw = localStorage.getItem(key);
@@ -936,6 +1005,7 @@ export function getStoredBookmarks(): Bookmark[] {
         try {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            _memoryCachedBookmarks = parsed;
             saveStoredBookmarks(parsed);
             return parsed;
           }
@@ -944,6 +1014,7 @@ export function getStoredBookmarks(): Bookmark[] {
         }
       }
     }
+    _memoryCachedBookmarks = [];
     return [];
   } catch (e) {
     console.error('Failed to load bookmarks from localStorage:', e);
@@ -952,6 +1023,7 @@ export function getStoredBookmarks(): Bookmark[] {
 }
 
 export function saveStoredBookmarks(bookmarks: Bookmark[]): void {
+  _memoryCachedBookmarks = bookmarks;
   try {
     localStorage.setItem(STORAGE_KEYS.BOOKMARKS, JSON.stringify(bookmarks));
   } catch (e) {
@@ -960,6 +1032,10 @@ export function saveStoredBookmarks(bookmarks: Bookmark[]): void {
 }
 
 export function getStoredProgress(): UserProgress {
+  if (_memoryCachedProgress && typeof _memoryCachedProgress === 'object' && !Array.isArray(_memoryCachedProgress)) {
+    return _memoryCachedProgress;
+  }
+
   try {
     for (const key of LEGACY_PROGRESS_KEYS) {
       const raw = localStorage.getItem(key);
@@ -991,6 +1067,7 @@ export function getStoredProgress(): UserProgress {
               lastSyncedAt: parsed.lastSyncedAt,
               lastSyncedDevice: parsed.lastSyncedDevice,
             };
+            _memoryCachedProgress = result;
             saveStoredProgress(result);
             return result;
           }
@@ -1000,7 +1077,7 @@ export function getStoredProgress(): UserProgress {
       }
     }
 
-    return {
+    const defaultProg: UserProgress = {
       completedTopicIds: [],
       unitStatuses: {},
       readingMinutesByCourse: {},
@@ -1014,8 +1091,10 @@ export function getStoredProgress(): UserProgress {
       bookmarkedQuestionIds: [],
       recentQuestionHistory: [],
     };
+    _memoryCachedProgress = defaultProg;
+    return defaultProg;
   } catch (e) {
-    return {
+    const fallbackProg: UserProgress = {
       completedTopicIds: [],
       unitStatuses: {},
       readingMinutesByCourse: {},
@@ -1029,10 +1108,13 @@ export function getStoredProgress(): UserProgress {
       bookmarkedQuestionIds: [],
       recentQuestionHistory: [],
     };
+    _memoryCachedProgress = fallbackProg;
+    return fallbackProg;
   }
 }
 
 export function saveStoredProgress(progress: UserProgress): void {
+  _memoryCachedProgress = progress;
   try {
     localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
   } catch (e) {

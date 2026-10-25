@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -83,7 +83,7 @@ interface StudyReaderViewProps {
 type ReaderTheme = 'parchment' | 'sepia' | 'white' | 'night';
 type ReaderFontFamily = 'serif' | 'sans';
 
-export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
+const StudyReaderViewComponent: React.FC<StudyReaderViewProps> = ({
   course,
   courses,
   currentUnit,
@@ -122,10 +122,11 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
   const [fontSizeLevel, setFontSizeLevel] = useState<number>(2); // 1: 15px, 2: 17px, 3: 19px, 4: 21px
   const [isWideMeasure, setIsWideMeasure] = useState<boolean>(false);
 
-  // Scroll Progress Tracking & iPhone Scroll Stability
-  const [scrollProgress, setScrollProgress] = useState(initialReadingPosition || 0);
+  // High-performance DOM progress bar ref (zero re-renders on scroll)
+  const progressBarRef = useRef<HTMLDivElement>(null);
   const hasRestoredTopicIdRef = useRef<string | null>(null);
   const scrollDebounceTimerRef = useRef<any>(null);
+  const isRestoringScrollRef = useRef<boolean>(false);
 
   // Restore reading position ONCE when entering a new topic - never while user is scrolling
   useEffect(() => {
@@ -133,16 +134,23 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
     hasRestoredTopicIdRef.current = currentTopic.id;
 
     if (initialReadingPosition && initialReadingPosition > 0) {
+      isRestoringScrollRef.current = true;
       const timer = setTimeout(() => {
         const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
         if (totalHeight > 0) {
           const targetY = (initialReadingPosition / 100) * totalHeight;
           window.scrollTo({ top: targetY, behavior: 'instant' });
         }
-      }, 120);
+        if (progressBarRef.current) {
+          progressBarRef.current.style.width = `${initialReadingPosition}%`;
+        }
+        setTimeout(() => {
+          isRestoringScrollRef.current = false;
+        }, 200);
+      }, 100);
       return () => clearTimeout(timer);
     }
-  }, [currentTopic.id]);
+  }, [currentTopic.id, initialReadingPosition]);
 
   useEffect(() => {
     let ticking = false;
@@ -152,17 +160,21 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
           const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
           if (totalHeight > 0) {
             const progress = Math.min(100, Math.max(0, Math.round((window.scrollY / totalHeight) * 100)));
-            setScrollProgress(progress);
-
-            // Debounce parent progress record updates so scrolling on iOS touch devices is calm and jitter-free
-            if (scrollDebounceTimerRef.current) {
-              clearTimeout(scrollDebounceTimerRef.current);
+            if (progressBarRef.current) {
+              progressBarRef.current.style.width = `${progress}%`;
             }
-            scrollDebounceTimerRef.current = setTimeout(() => {
-              if (onUpdateReadingPosition) {
-                onUpdateReadingPosition(course.id, currentUnit.id, currentTopic.id, progress);
+
+            // Debounce parent progress record updates calmly without freezing touch scrolling
+            if (!isRestoringScrollRef.current) {
+              if (scrollDebounceTimerRef.current) {
+                clearTimeout(scrollDebounceTimerRef.current);
               }
-            }, 600);
+              scrollDebounceTimerRef.current = setTimeout(() => {
+                if (onUpdateReadingPosition) {
+                  onUpdateReadingPosition(course.id, currentUnit.id, currentTopic.id, progress);
+                }
+              }, 1200);
+            }
           }
           ticking = false;
         });
@@ -185,17 +197,23 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
   const [noteSavedFeedback, setNoteSavedFeedback] = useState(false);
 
   const isCompleted = completedTopicIds.includes(currentTopic.id);
-  const topicNotes = notes.filter((n) => n.courseId === course.id && n.topicId === currentTopic.id);
+  const topicNotes = useMemo(
+    () => notes.filter((n) => n.courseId === course.id && n.topicId === currentTopic.id),
+    [notes, course.id, currentTopic.id]
+  );
 
-  // Compute next and previous topics across all modules/units of this course
-  const allCourseTopics: { unit: StudyUnit; topic: StudyTopic }[] = [];
-  course.modules.forEach((mod) => {
-    mod.units.forEach((u) => {
-      u.topics.forEach((t) => {
-        allCourseTopics.push({ unit: u, topic: t });
+  // Compute next and previous topics across all modules/units of this course (memoized)
+  const allCourseTopics = useMemo(() => {
+    const list: { unit: StudyUnit; topic: StudyTopic }[] = [];
+    course.modules.forEach((mod) => {
+      mod.units.forEach((u) => {
+        u.topics.forEach((t) => {
+          list.push({ unit: u, topic: t });
+        });
       });
     });
-  });
+    return list;
+  }, [course]);
 
   const currentIndex = allCourseTopics.findIndex((item) => item.topic.id === currentTopic.id);
   const prevItem = currentIndex > 0 ? allCourseTopics[currentIndex - 1] : null;
@@ -303,13 +321,18 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
 
   const currentTheme = themeClasses[theme];
 
-  // Retrieve authentic past examination questions mapped to this unit from both uploaded documents
-  const unitPastQuestions = getPastQuestionsForUnit(
-    pastQuestions,
-    course.id,
-    currentUnit.id,
-    currentUnit.unitNumber,
-    currentUnit.title
+  // Retrieve authentic past examination questions mapped to this unit from both uploaded documents (memoized)
+  const unitPastQuestions = useMemo(
+    () =>
+      getPastQuestionsForUnit(
+        pastQuestions,
+        course.id,
+        currentUnit.id,
+        currentUnit.unitNumber,
+        currentUnit.title,
+        courses
+      ),
+    [pastQuestions, course.id, currentUnit.id, currentUnit.unitNumber, currentUnit.title, courses]
   );
 
   // Font size classes for article body
@@ -325,8 +348,9 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
       {/* Scroll Progress Bar */}
       <div className="fixed top-16 left-0 right-0 z-50 h-1 bg-black/5 pointer-events-none">
         <div
+          ref={progressBarRef}
           className="h-full bg-[#14382B] transition-all duration-150"
-          style={{ width: `${scrollProgress}%` }}
+          style={{ width: `${initialReadingPosition || 0}%` }}
         />
       </div>
 
@@ -1371,17 +1395,21 @@ export const StudyReaderView: React.FC<StudyReaderViewProps> = ({
         onSaveAsNote={handleExplainSimplySaveNote}
       />
 
-      {/* StudyVault AI Tutor Chatbot */}
-      <AITutorChat
-        course={course}
-        courses={courses}
-        initialCourseId={course.id}
-        activeUnit={currentUnit}
-        activeTopic={currentTopic}
-        isOpen={aiTutorOpen}
-        onClose={() => setAiTutorOpen(false)}
-        onSaveExplanationAsNote={handleExplainSimplySaveNote}
-      />
+      {/* StudyVault AI Tutor Chatbot (lazy mounted) */}
+      {aiTutorOpen && (
+        <AITutorChat
+          course={course}
+          courses={courses}
+          initialCourseId={course.id}
+          activeUnit={currentUnit}
+          activeTopic={currentTopic}
+          isOpen={aiTutorOpen}
+          onClose={() => setAiTutorOpen(false)}
+          onSaveExplanationAsNote={handleExplainSimplySaveNote}
+        />
+      )}
     </div>
   );
 };
+
+export const StudyReaderView = React.memo(StudyReaderViewComponent);

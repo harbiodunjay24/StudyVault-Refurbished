@@ -288,6 +288,7 @@ export default function App() {
     const updated = [newCourse, ...courses];
     setCourses(updated);
     saveStoredCourses(updated);
+    triggerCloudSave(progress, notes, bookmarks, true, pastQuestions, updated, true);
     // Switch to the newly created course's dashboard
     setSelectedCourseId(newCourse.id);
     setCurrentView('courses');
@@ -297,6 +298,7 @@ export default function App() {
     const updated = courses.map((c) => (c.id === updatedCourse.id ? updatedCourse : c));
     setCourses(updated);
     saveStoredCourses(updated);
+    triggerCloudSave(progress, notes, bookmarks, true, pastQuestions, updated, true);
   };
 
   const handleDeleteCourse = (courseId: string) => {
@@ -309,6 +311,7 @@ export default function App() {
     if (activeReadingTopic?.courseId === courseId) {
       setActiveReadingTopic(null);
     }
+    triggerCloudSave(progress, notes, bookmarks, true, pastQuestions, updated, true);
   };
 
   const triggerCloudSave = (
@@ -317,20 +320,35 @@ export default function App() {
     updatedBookmarks: Bookmark[] = bookmarks,
     immediate: boolean = false,
     updatedPQ: PastExamQuestionItem[] = pastQuestions,
-    updatedCoursesList: Course[] = courses
+    updatedCoursesList: Course[] = courses,
+    isFullLibrarySync: boolean = false
   ) => {
-    cloudSyncService.queueCloudSave(
-      {
-        progress: updatedProgress,
-        notes: updatedNotes,
-        bookmarks: updatedBookmarks,
-        customPastQuestions: updatedPQ,
-        customCourses: updatedCoursesList,
-        lastActiveStudySession: updatedProgress.lastActiveStudySession,
-        unitReadingPositions: updatedProgress.unitReadingPositions,
-      },
-      immediate
-    );
+    if (isFullLibrarySync) {
+      cloudSyncService.queueCloudSave(
+        {
+          progress: updatedProgress,
+          notes: updatedNotes,
+          bookmarks: updatedBookmarks,
+          customPastQuestions: updatedPQ,
+          customCourses: updatedCoursesList,
+          lastActiveStudySession: updatedProgress.lastActiveStudySession,
+          unitReadingPositions: updatedProgress.unitReadingPositions,
+        },
+        immediate
+      );
+    } else {
+      // Lightweight progress delta sync (< 5KB vs 3.5MB): instant & non-blocking
+      cloudSyncService.queueProgressDeltaSave(
+        {
+          progress: updatedProgress,
+          notes: updatedNotes,
+          bookmarks: updatedBookmarks,
+          lastActiveStudySession: updatedProgress.lastActiveStudySession,
+          unitReadingPositions: updatedProgress.unitReadingPositions,
+        },
+        immediate
+      );
+    }
   };
 
   const handleReadingPositionUpdate = (
@@ -374,34 +392,39 @@ export default function App() {
   };
 
   const handleSelectTopic = (courseId: string, unitId: string, topicId: string) => {
+    // 1. Instantly display the reading interface without waiting for disk or network I/O (< 5ms)
     setActiveReadingTopic({ courseId, unitId, topicId });
-    const courseObj = courses.find((c) => c.id === courseId);
-    const unitObj = courseObj?.modules.flatMap((m) => m.units).find((u) => u.id === unitId);
-    const topicObj = unitObj?.topics.find((t) => t.id === topicId);
-    const savedPos = progress.unitReadingPositions?.[unitId] || progress.lastReadingPositionRatio || 0;
 
-    const studySession: StudySessionRecord = {
-      courseId,
-      courseCode: courseObj?.code || '',
-      courseTitle: courseObj?.title || '',
-      unitId,
-      unitTitle: unitObj?.title || '',
-      topicId,
-      topicTitle: topicObj?.title || '',
-      readingPositionRatio: savedPos,
-      timestamp: new Date().toISOString(),
-    };
+    // 2. Asynchronously record study session & persist progress delta calmly in the background
+    setTimeout(() => {
+      const courseObj = courses.find((c) => c.id === courseId);
+      const unitObj = courseObj?.modules.flatMap((m) => m.units).find((u) => u.id === unitId);
+      const topicObj = unitObj?.topics.find((t) => t.id === topicId);
+      const savedPos = progress.unitReadingPositions?.[unitId] || progress.lastReadingPositionRatio || 0;
 
-    const updatedProgress: UserProgress = {
-      ...progress,
-      lastActiveCourseId: courseId,
-      lastActiveUnitId: unitId,
-      lastActiveTopicId: topicId,
-      lastActiveStudySession: studySession,
-    };
-    setProgress(updatedProgress);
-    saveStoredProgress(updatedProgress);
-    triggerCloudSave(updatedProgress, notes, bookmarks, true);
+      const studySession: StudySessionRecord = {
+        courseId,
+        courseCode: courseObj?.code || '',
+        courseTitle: courseObj?.title || '',
+        unitId,
+        unitTitle: unitObj?.title || '',
+        topicId,
+        topicTitle: topicObj?.title || '',
+        readingPositionRatio: savedPos,
+        timestamp: new Date().toISOString(),
+      };
+
+      const updatedProgress: UserProgress = {
+        ...progress,
+        lastActiveCourseId: courseId,
+        lastActiveUnitId: unitId,
+        lastActiveTopicId: topicId,
+        lastActiveStudySession: studySession,
+      };
+      setProgress(updatedProgress);
+      saveStoredProgress(updatedProgress);
+      triggerCloudSave(updatedProgress, notes, bookmarks, false);
+    }, 40);
   };
 
   const handleMarkTopicCompleted = (topicId: string) => {
@@ -592,7 +615,7 @@ export default function App() {
       saveStoredCourses(updatedCourses);
     }
 
-    triggerCloudSave(progress, notes, bookmarks, true, updatedPQ, updatedCourses);
+    triggerCloudSave(progress, notes, bookmarks, true, updatedPQ, updatedCourses, true);
   };
 
   const handleToggleBookmarkQuestion = (questionId: string) => {
@@ -969,8 +992,8 @@ export default function App() {
         />
       )}
 
-      {/* Global AI Tutor Chatbot */}
-      {courses.length > 0 && (
+      {/* Global AI Tutor Chatbot (lazy mounted) */}
+      {courses.length > 0 && globalAiTutorOpen && (
         <AITutorChat
           courses={courses}
           initialCourseId={selectedCourseId}

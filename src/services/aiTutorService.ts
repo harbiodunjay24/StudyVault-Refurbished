@@ -19,6 +19,176 @@ export interface AITutorResponse {
   suggestedFollowUps: string[];
 }
 
+// Client-side quick response cache for instant answers (< 5ms) on repeat queries
+const localQueryCache = new Map<string, AITutorResponse>();
+
+/**
+ * Progressive streaming AI Tutor query dispatcher.
+ * Delivers immediate token chunks to the UI via onChunk callback as they arrive,
+ * with graceful fallback to local semantic retrieval.
+ */
+export async function askAITutorStream(
+  question: string,
+  context: TutorQueryContext,
+  onChunk: (chunk: string, accumulated: string) => void,
+  signal?: AbortSignal
+): Promise<AITutorResponse> {
+  const trimmed = question.trim();
+  if (!trimmed) {
+    return {
+      text: 'Please ask an academic question about your course materials or request an explanation.',
+      engineUsed: 'textbook_retrieval',
+      suggestedFollowUps: [
+        'Explain this in simpler English',
+        'Compare ENT 304 and ENT 308 concepts',
+        'Ask me a 10-mark examination question'
+      ],
+    };
+  }
+
+  // Check client-side cache
+  const cacheKey = `${(context.course?.code || 'all').toLowerCase()}::${(context.activeUnit?.id || '').toLowerCase()}::${trimmed.toLowerCase()}`;
+  const cached = localQueryCache.get(cacheKey);
+  if (cached) {
+    onChunk(cached.text, cached.text);
+    return cached;
+  }
+
+  // Determine list of courses to search based on scope
+  const targetCourses: Course[] = [];
+  if (context.selectedScope && context.selectedScope !== 'all') {
+    const matched = context.courses?.find((c) => c.id === context.selectedScope) || context.course;
+    if (matched) targetCourses.push(matched);
+  } else if (context.courses && context.courses.length > 0) {
+    targetCourses.push(...context.courses);
+  } else if (context.course) {
+    targetCourses.push(context.course);
+  }
+
+  // Gather relevant textbook passages from target courses
+  const retrievedPassages = retrievePassagesFromCourses(
+    trimmed,
+    targetCourses,
+    context.activeUnit,
+    context.activeTopic
+  );
+
+  const isCrossCourse = targetCourses.length > 1;
+  const primaryCourse = targetCourses[0] || context.course;
+
+  if (retrievedPassages.length === 0) {
+    const fallbackRes: AITutorResponse = {
+      text: INSUFFICIENT_INFORMATION_SENTENCE,
+      sourceReference: primaryCourse ? `${primaryCourse.code}: ${primaryCourse.title}` : 'Library Materials',
+      engineUsed: 'textbook_retrieval',
+      suggestedFollowUps: [
+        'What core topics are covered in my textbooks?',
+        'Explain leadership theories in simpler English',
+        'Explain corporate governance codes'
+      ],
+    };
+    onChunk(fallbackRes.text, fallbackRes.text);
+    return fallbackRes;
+  }
+
+  const payload = {
+    courseCode: isCrossCourse ? 'ALL_COURSES' : primaryCourse?.code,
+    courseTitle: isCrossCourse ? 'All Library Courses' : primaryCourse?.title,
+    unitTitle: context.activeUnit?.title,
+    topicTitle: context.activeTopic?.title,
+    question: trimmed,
+    messages: context.conversationHistory.slice(-4).map((m) => ({
+      role: m.sender === 'user' ? 'user' : 'model',
+      content: m.text,
+    })),
+    textbookPassages: retrievedPassages.slice(0, 4).map((p) => ({
+      title: p.topic.title,
+      reference: p.topic.sourceReference || `${p.courseCode}, ${p.unitTitle}`,
+      content: p.topic.content,
+      definitions: p.topic.textbookDefinitions || [],
+      simplified: p.topic.simplifiedExplanation,
+      summaryPoints: p.topic.summaryPoints || [],
+    })),
+  };
+
+  // Attempt progressive SSE streaming
+  try {
+    const res = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    if (res.ok && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = '';
+      let serverMeta: any = null;
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const matchEvent = line.match(/^event:\s*(\w+)/m);
+          const matchData = line.match(/^data:\s*(.+)$/m);
+          const eventType = matchEvent ? matchEvent[1] : 'chunk';
+          const dataRaw = matchData ? matchData[1] : '';
+
+          if (eventType === 'chunk' && dataRaw) {
+            try {
+              const parsed = JSON.parse(dataRaw);
+              if (parsed.text) {
+                accumulatedText += parsed.text;
+                onChunk(parsed.text, accumulatedText);
+              }
+            } catch {
+              // ignore parse errors on fragmented data
+            }
+          } else if (eventType === 'done' && dataRaw) {
+            try {
+              serverMeta = JSON.parse(dataRaw);
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
+      if (accumulatedText) {
+        const finalResponse: AITutorResponse = {
+          text: accumulatedText,
+          sourceReference:
+            serverMeta?.sourceReference ||
+            retrievedPassages[0].topic.sourceReference ||
+            `${retrievedPassages[0].courseCode}, ${retrievedPassages[0].unitTitle}`,
+          engineUsed: 'gemini_grounded',
+          suggestedFollowUps: generateFollowUps(trimmed, retrievedPassages[0].topic, isCrossCourse),
+        };
+        localQueryCache.set(cacheKey, finalResponse);
+        return finalResponse;
+      }
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') {
+      throw err;
+    }
+    // Fall back to non-streaming or local retrieval
+  }
+
+  // Fallback to standard askAITutor
+  const standardRes = await askAITutor(question, context);
+  onChunk(standardRes.text, standardRes.text);
+  return standardRes;
+}
+
 /**
  * Main AI Tutor query dispatcher.
  * Supports single course scope or library-wide cross-course tutoring and comparisons.
@@ -40,6 +210,13 @@ export async function askAITutor(
         'Ask me a 10-mark examination question'
       ],
     };
+  }
+
+  // Check client-side cache
+  const cacheKey = `${(context.course?.code || 'all').toLowerCase()}::${(context.activeUnit?.id || '').toLowerCase()}::${trimmed.toLowerCase()}`;
+  const cached = localQueryCache.get(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   // Determine list of courses to search based on scope
@@ -89,11 +266,11 @@ export async function askAITutor(
         unitTitle: context.activeUnit?.title,
         topicTitle: context.activeTopic?.title,
         question: trimmed,
-        messages: context.conversationHistory.slice(-6).map((m) => ({
+        messages: context.conversationHistory.slice(-4).map((m) => ({
           role: m.sender === 'user' ? 'user' : 'model',
           content: m.text,
         })),
-        textbookPassages: retrievedPassages.slice(0, 5).map((p) => ({
+        textbookPassages: retrievedPassages.slice(0, 4).map((p) => ({
           title: p.topic.title,
           reference: p.topic.sourceReference || `${p.courseCode}, ${p.unitTitle}`,
           content: p.topic.content,
@@ -107,7 +284,7 @@ export async function askAITutor(
     if (res.ok) {
       const data = await res.json();
       if (data && data.reply) {
-        return {
+        const responseObj: AITutorResponse = {
           text: data.reply,
           sourceReference:
             data.sourceReference ||
@@ -117,6 +294,8 @@ export async function askAITutor(
           suggestedFollowUps:
             data.suggestedFollowUps || generateFollowUps(trimmed, retrievedPassages[0].topic, isCrossCourse),
         };
+        localQueryCache.set(cacheKey, responseObj);
+        return responseObj;
       }
     }
   } catch {
@@ -124,7 +303,9 @@ export async function askAITutor(
   }
 
   // Fallback to local high-precision textbook retrieval response
-  return generateTextbookRetrievedResponse(trimmed, retrievedPassages, targetCourses, context);
+  const localRes = generateTextbookRetrievedResponse(trimmed, retrievedPassages, targetCourses, context);
+  localQueryCache.set(cacheKey, localRes);
+  return localRes;
 }
 
 export interface RetrievedCourseMatch {

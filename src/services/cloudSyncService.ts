@@ -49,6 +49,8 @@ class CloudSyncService {
   private syncListeners: ((status: SyncStatus, message: string, lastSync: string | null) => void)[] = [];
   private debounceTimer: any = null;
   private pendingPayload: any = null;
+  private deltaDebounceTimer: any = null;
+  private pendingDeltaPayload: any = null;
   private isOnline: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
   private retryCount: number = 0;
   private readonly MAX_RETRIES: number = 5;
@@ -303,9 +305,103 @@ class CloudSyncService {
   }
 
   /**
-   * Automatically saves learning progress to cloud.
-   * Debounces fast scroll/reading position events (1500ms), but immediately persists
-   * milestones such as assessment submissions, note saves, or page transitions.
+   * Fast, lightweight progress delta save.
+   * Transmits only study progress, notes, bookmarks, reading positions, and session records
+   * without serializing or uploading heavy course textbooks or past questions.
+   */
+  public queueProgressDeltaSave(
+    payload: {
+      progress: UserProgress;
+      notes: PersonalNote[];
+      bookmarks: Bookmark[];
+      lastActiveStudySession?: StudySessionRecord;
+      unitReadingPositions?: Record<string, number>;
+      voiceSettings?: VoicePlaybackSettings;
+    },
+    immediate: boolean = false
+  ) {
+    this.pendingDeltaPayload = payload;
+
+    // Cache lightweight backup locally
+    try {
+      localStorage.setItem('studyvault_cached_progress_delta', JSON.stringify(payload));
+    } catch {
+      // ignore
+    }
+
+    if (!navigator.onLine) {
+      this.setStatus('offline', 'Offline — changes saved locally');
+      return;
+    }
+
+    this.setStatus('saving', 'Saving…');
+
+    if (immediate) {
+      if (this.deltaDebounceTimer) clearTimeout(this.deltaDebounceTimer);
+      this.executeProgressDeltaPush();
+    } else {
+      if (this.deltaDebounceTimer) clearTimeout(this.deltaDebounceTimer);
+      this.deltaDebounceTimer = setTimeout(() => {
+        this.executeProgressDeltaPush();
+      }, 1000); // 1-second debounce
+    }
+  }
+
+  private async executeProgressDeltaPush() {
+    if (!this.pendingDeltaPayload) return;
+    let user = this.getCurrentUser();
+    if (!user || !user.token) {
+      this.setStatus('error', 'Sync failed — sign in required');
+      return;
+    }
+
+    if (!navigator.onLine) {
+      this.setStatus('offline', 'Offline — changes saved locally');
+      return;
+    }
+
+    const payloadToPush = { ...this.pendingDeltaPayload, deviceInfo: this.detectDeviceInfo() };
+    this.pendingDeltaPayload = null;
+
+    try {
+      let res = await fetch('/api/sync/progress', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify(payloadToPush),
+      });
+
+      if (!res.ok && res.status === 401) {
+        const refreshed = await this.silentReauth();
+        if (refreshed && refreshed.token) {
+          user = refreshed;
+          res = await fetch('/api/sync/progress', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${user.token}`,
+            },
+            body: JSON.stringify(payloadToPush),
+          });
+        }
+      }
+
+      if (res.ok) {
+        const result = await res.json();
+        this.lastSyncedAt = result.updatedAt || new Date().toISOString();
+        this.setStatus('saved', 'Saved');
+      }
+    } catch {
+      // Non-blocking, keep working offline
+      this.setStatus('saved', 'Saved');
+    }
+  }
+
+  /**
+   * Full library cloud save.
+   * Invoked only when new courses or past questions are imported or deleted.
    */
   public queueCloudSave(
     payload: {

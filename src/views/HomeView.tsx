@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ArrowRight,
   BookOpen,
@@ -60,17 +60,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
     }
   }
 
-  // Count total topics and completed topics
-  let totalTopics = 0;
-  courses.forEach((c) => {
-    c.modules.forEach((m) => {
-      m.units.forEach((u) => {
-        totalTopics += u.topics.length;
+  // Count total topics and completed topics (memoized)
+  const { totalTopics, overallPercentage } = useMemo(() => {
+    let total = 0;
+    courses.forEach((c) => {
+      c.modules.forEach((m) => {
+        m.units.forEach((u) => {
+          total += u.topics.length;
+        });
       });
     });
-  });
-  const completedTopicsCount = progress.completedTopicIds.length;
-  const overallPercentage = totalTopics > 0 ? Math.round((completedTopicsCount / totalTopics) * 100) : 0;
+    const completed = progress.completedTopicIds.length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return { totalTopics: total, overallPercentage: percent };
+  }, [courses, progress.completedTopicIds]);
 
   return (
     <div className="space-y-14 sm:space-y-20 pb-20">

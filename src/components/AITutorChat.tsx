@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Send,
   Sparkles,
@@ -12,10 +12,12 @@ import {
   Plus,
   Compass,
   Layers,
-  ChevronDown
+  ChevronDown,
+  StopCircle,
+  RotateCcw
 } from 'lucide-react';
 import { Course, StudyUnit, StudyTopic, AITutorMessage } from '../types';
-import { askAITutor, INSUFFICIENT_INFORMATION_SENTENCE } from '../services/aiTutorService';
+import { askAITutorStream, INSUFFICIENT_INFORMATION_SENTENCE } from '../services/aiTutorService';
 
 interface AITutorChatProps {
   course?: Course;
@@ -38,7 +40,10 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
   onClose,
   onSaveExplanationAsNote,
 }) => {
-  const courseList = (courses && courses.length > 0) ? courses : (course ? [course] : []);
+  const courseList = useMemo(
+    () => (courses && courses.length > 0 ? courses : course ? [course] : []),
+    [courses, course]
+  );
 
   // Scope: 'all' or course.id
   const [selectedScope, setSelectedScope] = useState<string>(() => {
@@ -71,7 +76,9 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
   const [isTyping, setIsTyping] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [lastQueryFailed, setLastQueryFailed] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Sync initialCourseId when it changes externally
   useEffect(() => {
@@ -80,10 +87,21 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
     }
   }, [initialCourseId, courseList]);
 
-  // Auto-scroll on new message
+  // Clean up in-flight requests on unmount or close
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
+  // Auto-scroll on new message (avoid scroll animation on initial mount)
+  useEffect(() => {
+    if (messages.length > 1 || isTyping) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length, isTyping]);
 
   const handleScopeChange = (newScope: string) => {
     setSelectedScope(newScope);
@@ -118,10 +136,25 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
     ]);
   };
 
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsTyping(false);
+    }
+  };
+
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend || inputText).trim();
     if (!query || isTyping) return;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setLastQueryFailed(null);
     const userMsg: AITutorMessage = {
       id: `user-${Date.now()}`,
       sender: 'user',
@@ -130,45 +163,90 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
       courseCode: activeCourse?.code || 'Library',
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    const tutorMsgId = `tutor-${Date.now()}`;
+    const initialTutorMsg: AITutorMessage = {
+      id: tutorMsgId,
+      sender: 'tutor',
+      text: '',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      sourceReference: activeCourse ? `${activeCourse.code} Textbook` : 'Library Materials',
+      engineUsed: 'gemini_grounded',
+      courseCode: activeCourse?.code,
+    };
+
+    setMessages((prev) => [...prev, userMsg, initialTutorMsg]);
     setInputText('');
     setIsTyping(true);
 
     try {
-      const response = await askAITutor(query, {
-        course: activeCourse,
-        courses: courseList,
-        selectedScope,
-        activeUnit: selectedScope === activeCourse?.id ? activeUnit : null,
-        activeTopic: selectedScope === activeCourse?.id ? activeTopic : null,
-        conversationHistory: [...messages, userMsg],
-      });
-
-      const tutorMsg: AITutorMessage = {
-        id: `tutor-${Date.now()}`,
-        sender: 'tutor',
-        text: response.text,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        sourceReference: response.sourceReference,
-        engineUsed: response.engineUsed,
-        suggestedFollowUps: response.suggestedFollowUps,
-        courseCode: activeCourse?.code,
-      };
-
-      setMessages((prev) => [...prev, tutorMsg]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
+      const response = await askAITutorStream(
+        query,
         {
-          id: `tutor-${Date.now()}`,
-          sender: 'tutor',
-          text: INSUFFICIENT_INFORMATION_SENTENCE,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          sourceReference: activeCourse ? `${activeCourse.code} Textbook` : 'Library Materials',
-        }
-      ]);
+          course: activeCourse,
+          courses: courseList,
+          selectedScope,
+          activeUnit: selectedScope === activeCourse?.id ? activeUnit : null,
+          activeTopic: selectedScope === activeCourse?.id ? activeTopic : null,
+          conversationHistory: [...messages, userMsg],
+        },
+        (_chunk, accumulated) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === tutorMsgId
+                ? {
+                    ...m,
+                    text: accumulated,
+                  }
+                : m
+            )
+          );
+        },
+        controller.signal
+      );
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tutorMsgId
+            ? {
+                ...m,
+                text: response.text,
+                sourceReference: response.sourceReference,
+                engineUsed: response.engineUsed,
+                suggestedFollowUps: response.suggestedFollowUps,
+              }
+            : m
+        )
+      );
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tutorMsgId
+              ? {
+                  ...m,
+                  text: m.text ? `${m.text}\n\n*(Generation stopped by user)*` : '*(Generation stopped by user)*',
+                }
+              : m
+          )
+        );
+      } else {
+        setLastQueryFailed(query);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tutorMsgId
+              ? {
+                  ...m,
+                  text: INSUFFICIENT_INFORMATION_SENTENCE,
+                  sourceReference: activeCourse ? `${activeCourse.code} Textbook` : 'Library Materials',
+                  engineUsed: 'textbook_retrieval',
+                }
+              : m
+          )
+        );
+      }
     } finally {
       setIsTyping(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -386,6 +464,20 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
         ))}
       </div>
 
+      {/* Retry Bar if last query failed */}
+      {lastQueryFailed && !isTyping && (
+        <div className="px-3 py-1.5 bg-amber-50 border-t border-amber-200 flex items-center justify-between text-xs text-amber-900 shrink-0">
+          <span>The previous request was interrupted.</span>
+          <button
+            onClick={() => handleSend(lastQueryFailed)}
+            className="flex items-center gap-1 font-semibold text-[#14382B] hover:underline"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
       {/* Input Form */}
       <form
         onSubmit={(e) => {
@@ -399,21 +491,35 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           placeholder={
-            selectedScope === 'all'
+            isTyping
+              ? 'Streaming response from your textbook...'
+              : selectedScope === 'all'
               ? 'Ask about any course or compare concepts (e.g. ENT 304 vs ENT 308)...'
               : `Ask about ${activeCourse?.code || 'this course'}...`
           }
           className="flex-1 text-xs sm:text-sm bg-[#FAF8F5] border border-[#D8D2C6] rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-[#14382B] focus:bg-white text-[#191C1A] placeholder-[#8C928E]"
           disabled={isTyping}
         />
-        <button
-          type="submit"
-          disabled={!inputText.trim() || isTyping}
-          className="p-2.5 bg-[#14382B] hover:bg-[#0E261D] disabled:opacity-40 text-white rounded-xl transition-all shrink-0 cursor-pointer"
-          title="Send message"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+        {isTyping ? (
+          <button
+            type="button"
+            onClick={handleStopGenerating}
+            className="px-3 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all shrink-0 cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            title="Stop generating"
+          >
+            <StopCircle className="w-4 h-4" />
+            <span className="hidden sm:inline">Stop</span>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!inputText.trim()}
+            className="p-2.5 bg-[#14382B] hover:bg-[#0E261D] disabled:opacity-40 text-white rounded-xl transition-all shrink-0 cursor-pointer"
+            title="Send message"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        )}
       </form>
     </div>
   );
