@@ -41,6 +41,7 @@ import {
   buildUnitPastQuestionsRevisionQueue,
 } from '../services/voiceLearningService';
 import { getPastQuestionsForCourse, isQuestionForCourse } from '../services/storage';
+import { FormattedContentRenderer } from '../components/FormattedContentRenderer';
 import {
   AUTHENTIC_ENT308_EXTRACTED_PAST_QUESTIONS,
   ENT308_UPLOADED_PQ_DOCUMENTS,
@@ -1098,9 +1099,12 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
                                   <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                                   <span>Official Examiner Marking Guide & Solution:</span>
                                 </div>
-                                <p className="font-serif whitespace-pre-line">
-                                  {q.officialAnswer || q.modelAnswer || q.suppliedAnswer}
-                                </p>
+                                <FormattedContentRenderer
+                                  content={q.officialAnswer || q.modelAnswer || q.suppliedAnswer || ''}
+                                  theme="parchment"
+                                  fontSizeClass="text-xs sm:text-sm leading-relaxed"
+                                  fontFamily="serif"
+                                />
                               </div>
                             ) : q.textbookExplanation ? (
                               <div className="text-xs sm:text-sm bg-blue-50/50 border border-blue-200 p-4 rounded-xl text-blue-950 leading-relaxed space-y-1.5">
@@ -1108,9 +1112,12 @@ export const PastQuestionsView: React.FC<PastQuestionsViewProps> = ({
                                   <BookOpen className="w-4 h-4 text-blue-700" />
                                   <span>Textbook-Grounded Explanation:</span>
                                 </div>
-                                <p className="font-serif whitespace-pre-line">
-                                  {q.textbookExplanation}
-                                </p>
+                                <FormattedContentRenderer
+                                  content={q.textbookExplanation}
+                                  theme="parchment"
+                                  fontSizeClass="text-xs sm:text-sm leading-relaxed"
+                                  fontFamily="serif"
+                                />
                               </div>
                             ) : (
                               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 font-medium">

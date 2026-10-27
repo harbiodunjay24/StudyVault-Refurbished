@@ -19,6 +19,7 @@ import {
   Headphones
 } from 'lucide-react';
 import { Course, StudyUnit, PastExamQuestionItem, WrittenEvaluationResult } from '../types';
+import { FormattedContentRenderer } from './FormattedContentRenderer';
 import {
   voiceLearningEngine,
   buildSingleQuestionQueue,
@@ -513,8 +514,13 @@ export const UnitPastQuestionsSection: React.FC<UnitPastQuestionsSectionProps> =
                         </span>
                       </div>
 
-                      <div className="text-xs sm:text-sm text-emerald-950 leading-relaxed whitespace-pre-line font-serif">
-                        {q.suppliedAnswer || q.modelAnswer}
+                      <div className="text-xs sm:text-sm text-emerald-950 leading-relaxed font-serif">
+                        <FormattedContentRenderer
+                          content={q.suppliedAnswer || q.modelAnswer || ''}
+                          theme="parchment"
+                          fontSizeClass="text-xs sm:text-sm leading-relaxed"
+                          fontFamily="serif"
+                        />
                       </div>
 
                       {/* Worked Solution Steps for Numerical Problems */}

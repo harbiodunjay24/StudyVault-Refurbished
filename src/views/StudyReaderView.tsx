@@ -28,7 +28,8 @@ import {
   Maximize2,
   AlertTriangle,
   X,
-  Headphones
+  Headphones,
+  ShieldCheck
 } from 'lucide-react';
 import {
   Course,
@@ -44,6 +45,7 @@ import { ExplainSimplyModal } from '../components/ExplainSimplyModal';
 import { WrittenAssessmentCheckpoint } from '../components/WrittenAssessmentCheckpoint';
 import { QuizCheckpoint } from '../components/QuizCheckpoint';
 import { AITutorChat } from '../components/AITutorChat';
+import { FormattedContentRenderer } from '../components/FormattedContentRenderer';
 import { UnitPastQuestionsSection } from '../components/UnitPastQuestionsSection';
 import { getPastQuestionsForUnit } from '../services/storage';
 import {
@@ -834,53 +836,44 @@ const StudyReaderViewComponent: React.FC<StudyReaderViewProps> = ({
 
           {/* Section A: Original Textbook Content (Preserved Fully) */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-[11px] font-semibold text-[#8C928E] uppercase tracking-wider pb-1">
-              <span>Section A: Original Textbook Content</span>
-              {currentTopic.sourceReference && <span>{currentTopic.sourceReference}</span>}
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-emerald-900/10 dark:border-emerald-500/20">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-400" />
+                  Primary Source · Authoritative Textbook Content
+                </span>
+              </div>
+              {currentTopic.sourceReference && (
+                <span className="text-[11px] font-mono text-[#8C928E] dark:text-[#8C928E]/80">
+                  Source: {currentTopic.sourceReference}
+                </span>
+              )}
             </div>
 
-            <article
-              className={`prose max-w-none transition-all space-y-5 ${fontSizeClasses} ${
-                fontFamily === 'serif' ? 'font-serif' : 'font-sans'
-              }`}
-            >
-              {currentTopic.content.split('\n\n').map((paragraph, pIdx) => {
-                if (
-                  paragraph.startsWith('1.') ||
-                  paragraph.startsWith('2.') ||
-                  paragraph.startsWith('-') ||
-                  paragraph.startsWith('i)') ||
-                  paragraph.startsWith('ii)')
-                ) {
-                  return (
-                    <div
-                      key={pIdx}
-                      className={`${currentTheme.surface} border ${currentTheme.border} p-5 sm:p-6 rounded-2xl whitespace-pre-line text-xs sm:text-sm leading-relaxed my-4 shadow-xs`}
-                    >
-                      {paragraph}
-                    </div>
-                  );
-                }
-                return (
-                  <p key={pIdx} className="leading-[1.8] opacity-95">
-                    {paragraph}
-                  </p>
-                );
-              })}
+            <article className="max-w-none transition-all">
+              <FormattedContentRenderer
+                content={currentTopic.content}
+                theme={theme}
+                fontSizeClass={fontSizeClasses}
+                fontFamily={fontFamily}
+              />
             </article>
           </div>
 
           {/* Section B: Explain It Simply (Directly Underneath) */}
           {currentTopic.simplifiedExplanation && (
-            <div className="bg-[#FAF2E6]/60 border border-[#E8DEC9] rounded-2xl p-5 sm:p-6 space-y-3.5 mt-8 shadow-xs">
+            <div className="bg-[#FAF2E6]/60 dark:bg-[#1D2520] border border-[#E8DEC9] dark:border-[#2C3830] rounded-2xl p-5 sm:p-6 space-y-3.5 mt-8 shadow-xs">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#8C5E1E] uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4 text-[#C88A36]" />
-                  <span>Section B: Explain It Simply (Textbook-Grounded)</span>
+                <div className="flex items-center gap-2 text-xs font-bold text-[#8C5E1E] dark:text-[#E2A755] uppercase tracking-wider">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                    <Sparkles className="w-3 h-3 text-[#C88A36]" />
+                    Derived Study Aid
+                  </span>
+                  <span>Section B: Simplified Explanation (Pedagogical Companion)</span>
                 </div>
                 <button
                   onClick={() => setShowInlineExplanation(!showInlineExplanation)}
-                  className="text-xs text-[#8C5E1E] font-semibold hover:underline"
+                  className="text-xs text-[#8C5E1E] dark:text-[#E2A755] font-semibold hover:underline"
                 >
                   {showInlineExplanation ? 'Hide' : 'Expand'}
                 </button>

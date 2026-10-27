@@ -16,6 +16,7 @@ import {
   BUS322_COURSE,
   GST107_COURSE
 } from './sampleData';
+import { normalizeTextbookContent } from '../utils/textbookFormatter';
 
 export interface ParseResult {
   document: StudyDocument;
@@ -161,7 +162,7 @@ export async function parseUploadedStudyFile(
         readingMinutes,
         sourceReference: `${file.name}, Section ${idx + 1}`,
         textbookDefinitions: definitions.length > 0 ? definitions.slice(0, 3) : undefined,
-        content: joined || 'No text extracted for this section.',
+        content: normalizeTextbookContent(joined) || 'No text extracted for this section.',
         summaryPoints: [
           `Authentic text preserved from uploaded document "${file.name}".`,
           `Covers ${secWords} words across key structural paragraphs.`,
@@ -613,7 +614,7 @@ export async function parseUploadedStudyFile(
                 readingMinutes: readTime,
                 sourceReference: `${file.name}, ${u.title}`,
                 content: u.textSample && u.textSample.length > 100
-                  ? u.textSample
+                  ? normalizeTextbookContent(u.textSample)
                   : `Text extracted from ${file.name} for ${u.title}. (${unitWordCount} words). Follow the textbook explanations carefully.`,
                 summaryPoints: [
                   `Directly indexed from uploaded document "${file.name}".`,

@@ -2,6 +2,7 @@ import { Course, AITutorMessage, StudyTopic, StudyUnit } from '../types';
 
 export const INSUFFICIENT_INFORMATION_SENTENCE =
   'The PDF does not provide enough information to answer this confidently.';
+export const INSUFFICIENT_INFO_SENTENCE = INSUFFICIENT_INFORMATION_SENTENCE;
 
 export interface TutorQueryContext {
   course?: Course;

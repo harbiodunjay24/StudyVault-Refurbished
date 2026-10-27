@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Course, StudyUnit, StudyTopic, AITutorMessage } from '../types';
 import { askAITutorStream, INSUFFICIENT_INFORMATION_SENTENCE } from '../services/aiTutorService';
+import { FormattedContentRenderer } from './FormattedContentRenderer';
 
 interface AITutorChatProps {
   course?: Course;
@@ -372,7 +373,16 @@ export const AITutorChat: React.FC<AITutorChatProps> = ({
                 }`}
               >
                 {/* Content */}
-                <div className="whitespace-pre-line font-sans">{m.text}</div>
+                {isTutor ? (
+                  <FormattedContentRenderer
+                    content={m.text}
+                    theme="parchment"
+                    fontSizeClass="text-xs sm:text-sm leading-relaxed"
+                    fontFamily="sans"
+                  />
+                ) : (
+                  <div className="whitespace-pre-line font-sans">{m.text}</div>
+                )}
 
                 {/* Source Citation & Actions */}
                 {isTutor && (

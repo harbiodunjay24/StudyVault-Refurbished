@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { GraduationCap, Plus, Menu, X, Sparkles, BookOpen, ChevronDown, Headphones } from 'lucide-react';
+import { GraduationCap, Plus, Menu, X, Sparkles, BookOpen, ChevronDown, Headphones, LogOut } from 'lucide-react';
 import { Course } from '../types';
 
 export type NavView = 'home' | 'start-studying' | 'courses' | 'past-questions' | 'notes' | 'progress';
@@ -11,6 +11,7 @@ interface NavbarProps {
   onOpenAITutor?: () => void;
   onOpenAudio?: () => void;
   onOpenAccount?: () => void;
+  onLogout?: () => void;
   syncStatus?: 'saved' | 'saving' | 'syncing' | 'offline' | 'error';
   syncMessage?: string;
   userDisplayName?: string;
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAITutor,
   onOpenAudio,
   onOpenAccount,
+  onLogout,
   syncStatus = 'saved',
   syncMessage = 'Saved',
   userDisplayName = 'Abiodun Ayodeji',
@@ -211,6 +213,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>+ Add Course</span>
           </button>
 
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-[#626864] hover:text-rose-700 bg-white hover:bg-rose-50 border border-[#D8D2C6] hover:border-rose-200 rounded-lg transition-all shadow-2xs"
+              title="Sign Out of StudyVault AI"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Sign Out</span>
+            </button>
+          )}
+
           {/* Mobile menu trigger */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -324,6 +337,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
           </div>
+
+          {onLogout && (
+            <div className="border-t border-[#E8E4DC] pt-2">
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onLogout();
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-sm font-semibold text-rose-700 hover:bg-rose-50 flex items-center gap-2 transition-colors"
+              >
+                <LogOut className="w-4 h-4 text-rose-600" />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>

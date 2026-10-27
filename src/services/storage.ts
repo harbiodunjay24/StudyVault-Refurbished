@@ -70,11 +70,25 @@ const STORAGE_KEYS = {
 };
 
 // High-speed in-memory caches to eliminate repeated JSON.parse / localStorage operations on main thread
+let _currentActiveUserId: string | null = null;
 let _memoryCachedCourses: Course[] | null = null;
 let _memoryCachedPastQuestions: PastExamQuestionItem[] | null = null;
 let _memoryCachedNotes: PersonalNote[] | null = null;
 let _memoryCachedBookmarks: Bookmark[] | null = null;
 let _memoryCachedProgress: UserProgress[] | UserProgress | null = null;
+
+export function setActiveUserStorageContext(userId: string | null): void {
+  _currentActiveUserId = userId;
+  clearActiveUserStorageCache();
+}
+
+export function clearActiveUserStorageCache(): void {
+  _memoryCachedCourses = null;
+  _memoryCachedPastQuestions = null;
+  _memoryCachedNotes = null;
+  _memoryCachedBookmarks = null;
+  _memoryCachedProgress = null;
+}
 
 const LEGACY_COURSE_KEYS = [
   'studyvault_courses_v13',
@@ -405,6 +419,72 @@ export function repairAndCompleteCourseUnits(course: Course): Course {
     };
   }
 
+  const isBus330 =
+    /BUS[-_\s]?330/i.test(course.code) ||
+    /Management[-_\s]?Theory/i.test(course.title) ||
+    course.id.includes('bus330');
+
+  if (isBus330) {
+    const existingUnitCount = course.modules.reduce((sum, m) => sum + m.units.length, 0);
+    const pastQuestionDocuments = (course.pastQuestionDocuments && course.pastQuestionDocuments.length >= 3)
+      ? course.pastQuestionDocuments
+      : BUS330_COURSE.pastQuestionDocuments;
+    const documents = (course.documents && course.documents.length >= 3)
+      ? course.documents
+      : BUS330_COURSE.documents;
+
+    if (existingUnitCount !== 15 || course.modules.length !== 4) {
+      return {
+        ...course,
+        code: 'BUS 330',
+        title: 'Management Theory',
+        department: course.department || BUS330_COURSE.department,
+        description: BUS330_COURSE.description,
+        documents,
+        pastQuestionDocuments,
+        modules: BUS330_COURSE.modules,
+      };
+    }
+    return {
+      ...course,
+      documents,
+      pastQuestionDocuments,
+    };
+  }
+
+  const isBus322 =
+    /BUS[-_\s]?322/i.test(course.code) ||
+    /Organi[sz]ational[-_\s]?Behaviour/i.test(course.title) ||
+    course.id.includes('bus322');
+
+  if (isBus322) {
+    const existingUnitCount = course.modules.reduce((sum, m) => sum + m.units.length, 0);
+    const pastQuestionDocuments = (course.pastQuestionDocuments && course.pastQuestionDocuments.length >= 3)
+      ? course.pastQuestionDocuments
+      : BUS322_COURSE.pastQuestionDocuments;
+    const documents = (course.documents && course.documents.length >= 3)
+      ? course.documents
+      : BUS322_COURSE.documents;
+
+    if (existingUnitCount !== 15 || course.modules.length !== 3) {
+      return {
+        ...course,
+        code: 'BUS 322',
+        title: 'Organisational Behaviour',
+        department: course.department || BUS322_COURSE.department,
+        description: BUS322_COURSE.description,
+        documents,
+        pastQuestionDocuments,
+        modules: BUS322_COURSE.modules,
+      };
+    }
+    return {
+      ...course,
+      documents,
+      pastQuestionDocuments,
+    };
+  }
+
   return course;
 }
 
@@ -414,8 +494,31 @@ export function repairAndCompleteCourseUnits(course: Course): Course {
  * and ensures authentic courses are available if the store was empty.
  */
 export function getStoredCourses(): Course[] {
-  if (_memoryCachedCourses && _memoryCachedCourses.length > 0) {
+  if (_memoryCachedCourses) {
     return _memoryCachedCourses;
+  }
+
+  // If unauthenticated or a secondary student (not Abiodun), strictly isolate
+  if (!_currentActiveUserId || _currentActiveUserId !== 'usr_abiodun_ayodeji_24') {
+    if (!_currentActiveUserId) {
+      _memoryCachedCourses = [];
+      return [];
+    }
+    const userKey = `studyvault_${_currentActiveUserId}_courses`;
+    try {
+      const raw = localStorage.getItem(userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          _memoryCachedCourses = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    _memoryCachedCourses = [];
+    return [];
   }
 
   try {
@@ -622,15 +725,41 @@ export function getStoredCourses(): Course[] {
 export function saveStoredCourses(courses: Course[]): void {
   _memoryCachedCourses = courses;
   try {
-    localStorage.setItem(STORAGE_KEYS.COURSES, JSON.stringify(courses));
+    const key = (_currentActiveUserId && _currentActiveUserId !== 'usr_abiodun_ayodeji_24')
+      ? `studyvault_${_currentActiveUserId}_courses`
+      : STORAGE_KEYS.COURSES;
+    localStorage.setItem(key, JSON.stringify(courses));
   } catch (e) {
     console.error('Failed to save courses to localStorage:', e);
   }
 }
 
 export function getStoredPastQuestions(): PastExamQuestionItem[] {
-  if (_memoryCachedPastQuestions && _memoryCachedPastQuestions.length > 0) {
+  if (_memoryCachedPastQuestions) {
     return _memoryCachedPastQuestions;
+  }
+
+  // If unauthenticated or a secondary student (not Abiodun), isolate
+  if (!_currentActiveUserId || _currentActiveUserId !== 'usr_abiodun_ayodeji_24') {
+    if (!_currentActiveUserId) {
+      _memoryCachedPastQuestions = [];
+      return [];
+    }
+    const userKey = `studyvault_${_currentActiveUserId}_past_questions`;
+    try {
+      const raw = localStorage.getItem(userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          _memoryCachedPastQuestions = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    _memoryCachedPastQuestions = [];
+    return [];
   }
 
   try {
@@ -949,7 +1078,10 @@ export function getPastQuestionsForUnit(
 export function saveStoredPastQuestions(questions: PastExamQuestionItem[]): void {
   _memoryCachedPastQuestions = questions;
   try {
-    localStorage.setItem(STORAGE_KEYS.PAST_QUESTIONS, JSON.stringify(questions));
+    const key = (_currentActiveUserId && _currentActiveUserId !== 'usr_abiodun_ayodeji_24')
+      ? `studyvault_${_currentActiveUserId}_past_questions`
+      : STORAGE_KEYS.PAST_QUESTIONS;
+    localStorage.setItem(key, JSON.stringify(questions));
   } catch (e) {
     console.error('Failed to save past questions to localStorage:', e);
   }
@@ -958,6 +1090,28 @@ export function saveStoredPastQuestions(questions: PastExamQuestionItem[]): void
 export function getStoredNotes(): PersonalNote[] {
   if (_memoryCachedNotes && Array.isArray(_memoryCachedNotes)) {
     return _memoryCachedNotes;
+  }
+
+  if (!_currentActiveUserId || _currentActiveUserId !== 'usr_abiodun_ayodeji_24') {
+    if (!_currentActiveUserId) {
+      _memoryCachedNotes = [];
+      return [];
+    }
+    const userKey = `studyvault_${_currentActiveUserId}_notes`;
+    try {
+      const raw = localStorage.getItem(userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          _memoryCachedNotes = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    _memoryCachedNotes = [];
+    return [];
   }
 
   try {
@@ -986,8 +1140,12 @@ export function getStoredNotes(): PersonalNote[] {
 
 export function saveStoredNotes(notes: PersonalNote[]): void {
   _memoryCachedNotes = notes;
+  if (!_currentActiveUserId) return;
   try {
-    localStorage.setItem(STORAGE_KEYS.NOTES, JSON.stringify(notes));
+    const key = (_currentActiveUserId !== 'usr_abiodun_ayodeji_24')
+      ? `studyvault_${_currentActiveUserId}_notes`
+      : STORAGE_KEYS.NOTES;
+    localStorage.setItem(key, JSON.stringify(notes));
   } catch (e) {
     console.error('Failed to save notes to localStorage:', e);
   }
@@ -996,6 +1154,28 @@ export function saveStoredNotes(notes: PersonalNote[]): void {
 export function getStoredBookmarks(): Bookmark[] {
   if (_memoryCachedBookmarks && Array.isArray(_memoryCachedBookmarks)) {
     return _memoryCachedBookmarks;
+  }
+
+  if (!_currentActiveUserId || _currentActiveUserId !== 'usr_abiodun_ayodeji_24') {
+    if (!_currentActiveUserId) {
+      _memoryCachedBookmarks = [];
+      return [];
+    }
+    const userKey = `studyvault_${_currentActiveUserId}_bookmarks`;
+    try {
+      const raw = localStorage.getItem(userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          _memoryCachedBookmarks = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    _memoryCachedBookmarks = [];
+    return [];
   }
 
   try {
@@ -1024,8 +1204,12 @@ export function getStoredBookmarks(): Bookmark[] {
 
 export function saveStoredBookmarks(bookmarks: Bookmark[]): void {
   _memoryCachedBookmarks = bookmarks;
+  if (!_currentActiveUserId) return;
   try {
-    localStorage.setItem(STORAGE_KEYS.BOOKMARKS, JSON.stringify(bookmarks));
+    const key = (_currentActiveUserId !== 'usr_abiodun_ayodeji_24')
+      ? `studyvault_${_currentActiveUserId}_bookmarks`
+      : STORAGE_KEYS.BOOKMARKS;
+    localStorage.setItem(key, JSON.stringify(bookmarks));
   } catch (e) {
     console.error('Failed to save bookmarks to localStorage:', e);
   }
@@ -1034,6 +1218,42 @@ export function saveStoredBookmarks(bookmarks: Bookmark[]): void {
 export function getStoredProgress(): UserProgress {
   if (_memoryCachedProgress && typeof _memoryCachedProgress === 'object' && !Array.isArray(_memoryCachedProgress)) {
     return _memoryCachedProgress;
+  }
+
+  if (!_currentActiveUserId || _currentActiveUserId !== 'usr_abiodun_ayodeji_24') {
+    const emptyProg: UserProgress = {
+      completedTopicIds: [],
+      unitStatuses: {},
+      readingMinutesByCourse: {},
+      totalMinutesStudied: 0,
+      flaggedForRevisionTopicIds: [],
+      revisionCount: 0,
+      quizScores: {},
+      writtenEvaluations: {},
+      mistakesBank: [],
+      readQuestionIds: [],
+      bookmarkedQuestionIds: [],
+      recentQuestionHistory: [],
+    };
+    if (!_currentActiveUserId) {
+      _memoryCachedProgress = emptyProg;
+      return emptyProg;
+    }
+    const userKey = `studyvault_${_currentActiveUserId}_progress`;
+    try {
+      const raw = localStorage.getItem(userKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          _memoryCachedProgress = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    _memoryCachedProgress = emptyProg;
+    return emptyProg;
   }
 
   try {
@@ -1115,8 +1335,12 @@ export function getStoredProgress(): UserProgress {
 
 export function saveStoredProgress(progress: UserProgress): void {
   _memoryCachedProgress = progress;
+  if (!_currentActiveUserId) return;
   try {
-    localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(progress));
+    const key = (_currentActiveUserId !== 'usr_abiodun_ayodeji_24')
+      ? `studyvault_${_currentActiveUserId}_progress`
+      : STORAGE_KEYS.PROGRESS;
+    localStorage.setItem(key, JSON.stringify(progress));
   } catch (e) {
     console.error('Failed to save progress to localStorage:', e);
   }

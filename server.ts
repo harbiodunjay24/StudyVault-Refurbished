@@ -278,7 +278,7 @@ app.post('/api/extract-pdf', async (req, res) => {
         extractedUnits.push({
           unitNumber: currentUnitNum,
           title: currentUnitTitle,
-          textSample: currentUnitLines.slice(0, 10).join('\n'),
+          textSample: currentUnitLines.join('\n').trim(),
           wordCount: currentUnitLines.join(' ').split(/\s+/).filter(Boolean).length,
         });
         currentUnitNum = unitHeaderMatch[1];
@@ -293,7 +293,7 @@ app.post('/api/extract-pdf', async (req, res) => {
       extractedUnits.push({
         unitNumber: currentUnitNum,
         title: currentUnitTitle,
-        textSample: currentUnitLines.slice(0, 10).join('\n'),
+        textSample: currentUnitLines.join('\n').trim(),
         wordCount: currentUnitLines.join(' ').split(/\s+/).filter(Boolean).length,
       });
     }
@@ -306,7 +306,7 @@ app.post('/api/extract-pdf', async (req, res) => {
       detectedTitle: detectedTitle || filename?.replace(/\.[^/.]+$/, '') || 'Course Study Material',
       extractedUnitsCount: extractedUnits.length,
       units: extractedUnits,
-      fullTextPreview: fullText.slice(0, 3000),
+      fullTextPreview: fullText.slice(0, 100000),
     });
   } catch (error: any) {
     console.error('PDF extraction error in server:', error);
@@ -451,7 +451,7 @@ STRICT TEXTBOOK KNOWLEDGE & ACCURACY POLICY:
 1. The uploaded course textbook passages provided below are your authoritative source of academic knowledge.
 2. Preserve original definitions, terminology, classifications, theories, named authors, formulas, and distinctions from the textbooks.
 3. You can answer questions about any course in the student's library, compare concepts across multiple courses when asked (e.g. comparing ENT 304 and ENT 308), explain difficult passages in clear everyday English, and provide relevant examples grounded in the textbooks.
-4. If the provided textbook passages do NOT contain enough information to answer with confidence, respond politely stating that the uploaded textbooks do not contain sufficient detail on that specific aspect.
+4. If the provided textbook passages do NOT contain enough information to answer confidently, return EXACTLY this sentence: "${INSUFFICIENT_INFO_SENTENCE}"
 5. When explaining, make difficult concepts easier to understand in clear, accessible language with analogies without changing their academic meaning.
 6. Always cite the relevant course, unit, or section reference from the provided passages.
 
@@ -581,7 +581,7 @@ STRICT TEXTBOOK KNOWLEDGE & ACCURACY POLICY:
 1. The uploaded course textbook passages provided below are your authoritative source of academic knowledge.
 2. Preserve original definitions, terminology, classifications, theories, named authors, formulas, and distinctions from the textbooks.
 3. You can answer questions about any course in the student's library, compare concepts across multiple courses when asked (e.g. comparing ENT 304 and ENT 308), explain difficult passages in clear everyday English, and provide relevant examples grounded in the textbooks.
-4. If the provided textbook passages do NOT contain enough information to answer with confidence, respond politely stating that the uploaded textbooks do not contain sufficient detail on that specific aspect.
+4. If the provided textbook passages do NOT contain enough information to answer confidently, return EXACTLY this sentence: "${INSUFFICIENT_INFO_SENTENCE}"
 5. When explaining, make difficult concepts easier to understand in clear, accessible language with analogies without changing their academic meaning.
 6. Always cite the relevant course, unit, or section reference from the provided passages.
 

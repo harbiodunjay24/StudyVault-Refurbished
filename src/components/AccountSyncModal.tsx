@@ -28,6 +28,7 @@ interface AccountSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUserChanged?: () => void;
+  onLogout?: () => void;
   onTriggerSync?: () => Promise<void>;
 }
 
@@ -35,9 +36,10 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
   isOpen,
   onClose,
   onUserChanged,
+  onLogout,
   onTriggerSync,
 }) => {
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser>(cloudSyncService.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(cloudSyncService.getCurrentUser());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('saved');
   const [syncMessage, setSyncMessage] = useState<string>('Saved');
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -152,10 +154,13 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
 
   const handleSignOut = () => {
     cloudSyncService.logout();
-    setCurrentUser(cloudSyncService.getCurrentUser());
-    setActiveTab('signin');
-    setFormSuccess('Signed out. Local progress remains safe on this device.');
-    if (onUserChanged) onUserChanged();
+    setCurrentUser(null);
+    onClose();
+    if (onLogout) {
+      onLogout();
+    } else if (onUserChanged) {
+      onUserChanged();
+    }
   };
 
   const deviceInfo = cloudSyncService.detectDeviceInfo();
@@ -167,13 +172,13 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
         <div className="px-6 py-5 bg-[#14382B] text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#E2C799] text-[#14382B] flex items-center justify-center font-serif font-bold text-lg shadow-inner">
-              {currentUser.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'A'}
+              {currentUser?.displayName ? currentUser.displayName.charAt(0).toUpperCase() : 'S'}
             </div>
             <div>
               <h2 className="font-serif font-bold text-lg text-white leading-tight">
-                {currentUser.displayName}
+                {currentUser?.displayName || 'StudyVault Student'}
               </h2>
-              <p className="text-xs text-[#E2C799] font-mono">{currentUser.email}</p>
+              <p className="text-xs text-[#E2C799] font-mono">{currentUser?.email || 'Individual Account'}</p>
             </div>
           </div>
           <button
@@ -291,16 +296,16 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-[#FAF2E6]">
                   <span className="text-[#585E5A]">Permanent Account ID</span>
                   <span className="font-mono font-bold text-[#14382B] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E8E4DC]">
-                    {currentUser.id}
+                    {currentUser?.id || '—'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-[#FAF2E6]">
                   <span className="text-[#585E5A]">Student Display Name</span>
-                  <span className="font-semibold text-[#14382B]">{currentUser.displayName}</span>
+                  <span className="font-semibold text-[#14382B]">{currentUser?.displayName || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs pb-2 border-b border-[#FAF2E6]">
                   <span className="text-[#585E5A]">Account Email</span>
-                  <span className="font-mono text-[#14382B]">{currentUser.email}</span>
+                  <span className="font-mono text-[#14382B]">{currentUser?.email || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-[#585E5A]">Last Confirmed Cloud Sync</span>
@@ -351,9 +356,9 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => handleQuickSwitch('harbiodunjay24@gmail.com')}
-                      disabled={currentUser.email === 'harbiodunjay24@gmail.com'}
+                      disabled={currentUser?.email === 'harbiodunjay24@gmail.com'}
                       className={`px-3 py-2 rounded-xl text-xs font-medium border text-left transition-colors ${
-                        currentUser.email === 'harbiodunjay24@gmail.com'
+                        currentUser?.email === 'harbiodunjay24@gmail.com'
                           ? 'bg-[#14382B]/10 border-[#14382B]/30 text-[#14382B] font-semibold'
                           : 'bg-white border-[#E8E4DC] text-[#2D312E] hover:bg-[#FAF8F5]'
                       }`}
@@ -364,9 +369,9 @@ export const AccountSyncModal: React.FC<AccountSyncModalProps> = ({
 
                     <button
                       onClick={() => handleQuickSwitch('test.student2@studyvault.ai')}
-                      disabled={currentUser.email === 'test.student2@studyvault.ai'}
+                      disabled={currentUser?.email === 'test.student2@studyvault.ai'}
                       className={`px-3 py-2 rounded-xl text-xs font-medium border text-left transition-colors ${
-                        currentUser.email === 'test.student2@studyvault.ai'
+                        currentUser?.email === 'test.student2@studyvault.ai'
                           ? 'bg-[#14382B]/10 border-[#14382B]/30 text-[#14382B] font-semibold'
                           : 'bg-white border-[#E8E4DC] text-[#2D312E] hover:bg-[#FAF8F5]'
                       }`}

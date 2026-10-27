@@ -18,6 +18,7 @@ import { AddDocumentModal } from './components/AddDocumentModal';
 import { AITutorChat } from './components/AITutorChat';
 import { AudioStudyPlayer } from './components/AudioStudyPlayer';
 import { AccountSyncModal } from './components/AccountSyncModal';
+import { AuthView } from './views/AuthView';
 import {
   cloudSyncService,
   SyncStatus,
@@ -56,6 +57,8 @@ import {
   saveStoredBookmarks,
   getStoredProgress,
   saveStoredProgress,
+  setActiveUserStorageContext,
+  clearActiveUserStorageCache,
   loadSampleFMS304,
   loadSampleENT302,
   loadSampleENT304,
@@ -152,14 +155,22 @@ export default function App() {
   };
 
   // Cloud Sync & Account State
-  const [currentUser, setCurrentUser] = useState<AuthenticatedUser>(cloudSyncService.getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
+    const user = cloudSyncService.getCurrentUser();
+    if (user) {
+      setActiveUserStorageContext(user.id);
+    } else {
+      setActiveUserStorageContext(null);
+    }
+    return user;
+  });
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('saved');
   const [syncMessage, setSyncMessage] = useState<string>('Saved');
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
-  // Load from local storage on mount and synchronize with Cloud
-  useEffect(() => {
+  const loadUserData = (userId: string) => {
+    setActiveUserStorageContext(userId);
     const loadedCourses = getStoredCourses();
     const loadedPQ = getStoredPastQuestions();
     const loadedNotes = getStoredNotes();
@@ -171,6 +182,18 @@ export default function App() {
     setNotes(loadedNotes);
     setBookmarks(loadedBookmarks);
     setProgress(loadedProgress);
+    if (loadedProgress.lastActiveCourseId) {
+      setSelectedCourseId(loadedProgress.lastActiveCourseId);
+    }
+  };
+
+  // Load from local storage on mount/auth and synchronize with Cloud
+  useEffect(() => {
+    if (!currentUser || !cloudSyncService.isAuthenticated()) {
+      return;
+    }
+
+    loadUserData(currentUser.id);
 
     // Subscribe to cloud sync service status
     const unsubscribe = cloudSyncService.subscribe((status, msg, lastSync) => {
@@ -199,79 +222,89 @@ export default function App() {
             setBookmarks(cloudData.bookmarks);
             saveStoredBookmarks(cloudData.bookmarks);
           }
-          if (cloudData.customPastQuestions && Array.isArray(cloudData.customPastQuestions) && cloudData.customPastQuestions.length > 0) {
-            setPastQuestions((prev) => {
-              const prevIds = new Set(prev.map((q) => q.id));
-              const toMerge = cloudData.customPastQuestions!.filter((q: any) => !prevIds.has(q.id));
-              if (toMerge.length > 0) {
-                const updated = [...toMerge, ...prev];
-                saveStoredPastQuestions(updated);
-                return updated;
-              }
-              return prev;
-            });
-          }
-          if (cloudData.customCourses && Array.isArray(cloudData.customCourses) && cloudData.customCourses.length > 0) {
-            setCourses((prev) => {
-              let changed = false;
-              const prevMap = new Map(prev.map((c) => [c.id, { ...c }]));
+          if (cloudData.customCourses && Array.isArray(cloudData.customCourses)) {
+            if (currentUser.id === 'usr_abiodun_ayodeji_24') {
+              setCourses((prev) => {
+                let changed = false;
+                const prevMap = new Map(prev.map((c) => [c.id, { ...c }]));
 
-              cloudData.customCourses!.forEach((cloudC: Course) => {
-                const existingKey = Array.from(prevMap.keys()).find((k) => {
-                  const local = prevMap.get(k)!;
-                  return (
-                    local.id === cloudC.id ||
-                    (local.code &&
-                      cloudC.code &&
-                      local.code.replace(/\s+/g, '').toUpperCase() ===
-                        cloudC.code.replace(/\s+/g, '').toUpperCase())
-                  );
+                cloudData.customCourses!.forEach((cloudC: Course) => {
+                  const existingKey = Array.from(prevMap.keys()).find((k) => {
+                    const local = prevMap.get(k)!;
+                    return (
+                      local.id === cloudC.id ||
+                      (local.code &&
+                        cloudC.code &&
+                        local.code.replace(/\s+/g, '').toUpperCase() ===
+                          cloudC.code.replace(/\s+/g, '').toUpperCase())
+                    );
+                  });
+
+                  if (!existingKey) {
+                    prevMap.set(cloudC.id, cloudC);
+                    changed = true;
+                  } else {
+                    const existingCourse = prevMap.get(existingKey)!;
+                    const existingPqDocs = existingCourse.pastQuestionDocuments || [];
+                    const cloudPqDocs = cloudC.pastQuestionDocuments || [];
+                    const mergedPqDocs = [...existingPqDocs];
+
+                    cloudPqDocs.forEach((d) => {
+                      const exists = mergedPqDocs.some((mp) => mp.id === d.id || mp.name === d.name);
+                      if (!exists) {
+                        mergedPqDocs.push(d);
+                        changed = true;
+                      }
+                    });
+
+                    const existingDocs = existingCourse.documents || [];
+                    const cloudDocs = cloudC.documents || [];
+                    const mergedDocs = [...existingDocs];
+
+                    cloudDocs.forEach((d) => {
+                      const exists = mergedDocs.some((ed) => ed.id === d.id || ed.name === d.name);
+                      if (!exists) {
+                        mergedDocs.push(d);
+                        changed = true;
+                      }
+                    });
+
+                    prevMap.set(existingKey, {
+                      ...existingCourse,
+                      pastQuestionDocuments: mergedPqDocs,
+                      documents: mergedDocs,
+                    });
+                  }
                 });
 
-                if (!existingKey) {
-                  prevMap.set(cloudC.id, cloudC);
-                  changed = true;
-                } else {
-                  const existingCourse = prevMap.get(existingKey)!;
-                  const existingPqDocs = existingCourse.pastQuestionDocuments || [];
-                  const cloudPqDocs = cloudC.pastQuestionDocuments || [];
-                  const mergedPqDocs = [...existingPqDocs];
-
-                  cloudPqDocs.forEach((d) => {
-                    const exists = mergedPqDocs.some((mp) => mp.id === d.id || mp.name === d.name);
-                    if (!exists) {
-                      mergedPqDocs.push(d);
-                      changed = true;
-                    }
-                  });
-
-                  const existingDocs = existingCourse.documents || [];
-                  const cloudDocs = cloudC.documents || [];
-                  const mergedDocs = [...existingDocs];
-
-                  cloudDocs.forEach((d) => {
-                    const exists = mergedDocs.some((ed) => ed.id === d.id || ed.name === d.name);
-                    if (!exists) {
-                      mergedDocs.push(d);
-                      changed = true;
-                    }
-                  });
-
-                  prevMap.set(existingKey, {
-                    ...existingCourse,
-                    pastQuestionDocuments: mergedPqDocs,
-                    documents: mergedDocs,
-                  });
+                if (changed) {
+                  const updated = Array.from(prevMap.values());
+                  saveStoredCourses(updated);
+                  return updated;
                 }
+                return prev;
               });
-
-              if (changed) {
-                const updated = Array.from(prevMap.values());
-                saveStoredCourses(updated);
-                return updated;
-              }
-              return prev;
-            });
+            } else {
+              setCourses(cloudData.customCourses);
+              saveStoredCourses(cloudData.customCourses);
+            }
+          }
+          if (cloudData.customPastQuestions && Array.isArray(cloudData.customPastQuestions)) {
+            if (currentUser.id === 'usr_abiodun_ayodeji_24') {
+              setPastQuestions((prev) => {
+                const prevIds = new Set(prev.map((q) => q.id));
+                const toMerge = cloudData.customPastQuestions!.filter((q: any) => !prevIds.has(q.id));
+                if (toMerge.length > 0) {
+                  const updated = [...toMerge, ...prev];
+                  saveStoredPastQuestions(updated);
+                  return updated;
+                }
+                return prev;
+              });
+            } else {
+              setPastQuestions(cloudData.customPastQuestions);
+              saveStoredPastQuestions(cloudData.customPastQuestions);
+            }
           }
         }
       } catch (err) {
@@ -281,7 +314,69 @@ export default function App() {
     initCloud();
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUser?.id]);
+
+  const handleUserAuthenticated = async (user: AuthenticatedUser) => {
+    setActiveUserStorageContext(user.id);
+    setCurrentUser(user);
+    loadUserData(user.id);
+
+    try {
+      const cloudData = await cloudSyncService.pullLatest();
+      if (cloudData) {
+        if (cloudData.progress) {
+          setProgress(cloudData.progress);
+          saveStoredProgress(cloudData.progress);
+          if (cloudData.progress.lastActiveCourseId) {
+            setSelectedCourseId(cloudData.progress.lastActiveCourseId);
+          }
+        }
+        if (cloudData.notes) {
+          setNotes(cloudData.notes);
+          saveStoredNotes(cloudData.notes);
+        }
+        if (cloudData.bookmarks) {
+          setBookmarks(cloudData.bookmarks);
+          saveStoredBookmarks(cloudData.bookmarks);
+        }
+        if (cloudData.customCourses && Array.isArray(cloudData.customCourses)) {
+          setCourses(cloudData.customCourses);
+          saveStoredCourses(cloudData.customCourses);
+        }
+        if (cloudData.customPastQuestions && Array.isArray(cloudData.customPastQuestions)) {
+          setPastQuestions(cloudData.customPastQuestions);
+          saveStoredPastQuestions(cloudData.customPastQuestions);
+        }
+      }
+    } catch (err) {
+      console.warn('Post-auth cloud sync pull failed:', err);
+    }
+  };
+
+  const handleLogout = () => {
+    cloudSyncService.logout();
+    clearActiveUserStorageCache();
+    setActiveUserStorageContext(null);
+    setCurrentUser(null);
+    setCourses([]);
+    setPastQuestions([]);
+    setNotes([]);
+    setBookmarks([]);
+    setProgress({
+      completedTopicIds: [],
+      unitStatuses: {},
+      readingMinutesByCourse: {},
+      totalMinutesStudied: 0,
+      flaggedForRevisionTopicIds: [],
+      revisionCount: 0,
+      quizScores: {},
+      writtenEvaluations: {},
+      mistakesBank: [],
+    });
+    setSelectedCourseId(null);
+    setActiveReadingTopic(null);
+    setCurrentView('home');
+  };
 
   // Update handlers
   const handleCourseCreated = (newCourse: Course) => {
@@ -767,6 +862,14 @@ export default function App() {
     setCurrentView(view);
   };
 
+  if (!currentUser || !cloudSyncService.isAuthenticated()) {
+    return (
+      <div className="min-h-screen bg-[#FAF8F5] text-[#191C1A]">
+        <AuthView onAuthenticated={handleUserAuthenticated} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5] text-[#191C1A]">
       {/* Top Bar adhering to Top Bar Contract */}
@@ -782,9 +885,10 @@ export default function App() {
           }
         }}
         onOpenAccount={() => setIsAccountModalOpen(true)}
+        onLogout={handleLogout}
         syncStatus={syncStatus}
         syncMessage={syncMessage}
-        userDisplayName={currentUser.displayName}
+        userDisplayName={currentUser?.displayName || 'Student'}
         coursesCount={courses.length}
         courses={courses}
         selectedCourseId={selectedCourseId}
@@ -1059,25 +1163,13 @@ export default function App() {
       <AccountSyncModal
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
+        onLogout={handleLogout}
         onUserChanged={async () => {
-          setCurrentUser(cloudSyncService.getCurrentUser());
-          const cloudData = await cloudSyncService.pullLatest();
-          if (cloudData) {
-            if (cloudData.progress) {
-              setProgress(cloudData.progress);
-              saveStoredProgress(cloudData.progress);
-              if (cloudData.progress.lastActiveCourseId) {
-                setSelectedCourseId(cloudData.progress.lastActiveCourseId);
-              }
-            }
-            if (cloudData.notes) {
-              setNotes(cloudData.notes);
-              saveStoredNotes(cloudData.notes);
-            }
-            if (cloudData.bookmarks) {
-              setBookmarks(cloudData.bookmarks);
-              saveStoredBookmarks(cloudData.bookmarks);
-            }
+          const user = cloudSyncService.getCurrentUser();
+          if (user) {
+            handleUserAuthenticated(user);
+          } else {
+            handleLogout();
           }
         }}
         onTriggerSync={async () => {

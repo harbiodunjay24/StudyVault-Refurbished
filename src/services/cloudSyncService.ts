@@ -29,11 +29,11 @@ export interface VoicePlaybackSettings {
   lastQueueItemIndex?: number;
 }
 
-const AUTH_USER_KEY = 'studyvault_authenticated_user_v1';
-const PENDING_QUEUE_KEY = 'studyvault_pending_sync_queue_v1';
+const AUTH_USER_KEY = 'studyvault_authenticated_user_v2';
+const PENDING_QUEUE_KEY = 'studyvault_pending_sync_queue_v2';
 
-// Default pre-seeded profile for Abiodun Ayodeji
-const DEFAULT_ABIODUN_USER: AuthenticatedUser = {
+// Authoritative pre-seeded profile for Abiodun Ayodeji
+export const DEFAULT_ABIODUN_USER: AuthenticatedUser = {
   id: 'usr_abiodun_ayodeji_24',
   email: 'harbiodunjay24@gmail.com',
   displayName: 'Abiodun Ayodeji',
@@ -66,12 +66,10 @@ class CloudSyncService {
       if (stored) {
         this.currentUser = JSON.parse(stored);
       } else {
-        // Auto-seed Abiodun Ayodeji as the primary scholar account
-        this.currentUser = DEFAULT_ABIODUN_USER;
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(DEFAULT_ABIODUN_USER));
+        this.currentUser = null;
       }
     } catch {
-      this.currentUser = DEFAULT_ABIODUN_USER;
+      this.currentUser = null;
     }
   }
 
@@ -114,11 +112,18 @@ class CloudSyncService {
     };
   }
 
-  public getCurrentUser(): AuthenticatedUser {
+  public isAuthenticated(): boolean {
     if (!this.currentUser) {
       this.initUser();
     }
-    return this.currentUser!;
+    return Boolean(this.currentUser && this.currentUser.token);
+  }
+
+  public getCurrentUser(): AuthenticatedUser | null {
+    if (!this.currentUser) {
+      this.initUser();
+    }
+    return this.currentUser;
   }
 
   // Auth Operations
@@ -191,7 +196,14 @@ class CloudSyncService {
 
   public logout() {
     this.currentUser = null;
-    localStorage.removeItem(AUTH_USER_KEY);
+    try {
+      localStorage.removeItem(AUTH_USER_KEY);
+      localStorage.removeItem(PENDING_QUEUE_KEY);
+      localStorage.removeItem('studyvault_cached_progress_delta');
+      localStorage.removeItem('studyvault_cached_progress_backup');
+    } catch {
+      // ignore
+    }
     this.setStatus('saved', 'Signed out');
   }
 
@@ -208,7 +220,8 @@ class CloudSyncService {
 
   public async silentReauth(): Promise<AuthenticatedUser | null> {
     const user = this.getCurrentUser();
-    const email = user?.email || DEFAULT_ABIODUN_USER.email;
+    if (!user || !user.email) return null;
+    const email = user.email;
     const deviceInfo = this.detectDeviceInfo();
     try {
       const res = await fetch('/api/auth/login', {
